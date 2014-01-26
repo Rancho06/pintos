@@ -577,12 +577,7 @@ EOF
 	    my $mode = defined ($squish_pty) ? "term" : "file";
 	    print BOCHSRC "com1: enabled=1, mode=$mode, dev=/dev/stdout\n";
 	}
-	if ($vga eq 'none') {
-	    print BOCHSRC "display_library: term\n";
-	}
-	elsif ($vga eq 'window') {
-	    print BOCHSRC "display_library: sdl\n";
-	}
+	print BOCHSRC "display_library: nogui\n" if $vga eq 'none';
     } else {
 	print BOCHSRC "display_library: term\n";
     }
