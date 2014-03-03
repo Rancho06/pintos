@@ -505,8 +505,6 @@ setup_stack (void **esp, char *args, int nargs, int argsz)
     while ( *arg != '\0') arg++;
     arg++;
   }
-  hex_dump (0,*esp, (argspace+pointerspace), true);
-
   return success;
 
 }
