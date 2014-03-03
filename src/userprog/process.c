@@ -19,7 +19,7 @@
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool load (char *cmdline, void (**eip) (void), void **esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -195,24 +195,56 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (void **esp, char *args, int nargs, int argsz);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
+
+/* Convert the spaces in start to NULs.  Multiple spaces count as one.  Return
+ * the number of space-delimited words detected
+ */
+static void
+format_command_line (char *start, int lim, int *argc, int *newlim)
+{
+  char *look = start;
+  char *set = start;
+  bool set_nul = true;
+  *argc = 0;
+  *newlim = 0;
+
+  while (look < start + lim && *look != '\0') {
+    if ( *look == ' ') {
+      if ( !set_nul ) { (*newlim)++; *set++ = '\0'; set_nul = true; }
+    }
+    else {
+      if ( set_nul ) { (*argc)++; set_nul = false; }
+      *set++ = *look;
+      (*newlim)++;
+    }
+    look++;
+  }
+  // The last NUL.
+  (*newlim)++;
+  while ( set != look )
+    *set++ = '\0';
+}
+
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp) 
+load (char *file_name, void (**eip) (void), void **esp)
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
   off_t file_ofs;
   bool success = false;
+  int argc = 0;
+  int argsz = 0;
   int i;
 
   /* Allocate and activate page directory. */
@@ -221,6 +253,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  format_command_line (file_name, PGSIZE, &argc, &argsz);
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
@@ -302,7 +335,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, file_name, argc, argsz))
     goto done;
 
   /* Start address. */
@@ -427,7 +460,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (void **esp, char *args, int nargs, int argsz)
 {
   uint8_t *kpage;
   bool success = false;
@@ -438,10 +471,44 @@ setup_stack (void **esp)
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
-      else
+      else {
         palloc_free_page (kpage);
+	return success;
+      }
     }
+  /* Lay out the stack */
+  /* Space for all the argument strings and word alignment */
+  int argspace = argsz + ((argsz % 4 == 0) ? 0 : (4 - (argsz % 4)));
+  /* space for all the pointers (including the null sentinel), argc, argv,
+   * and the return address */
+  int pointerspace = 4 * ( nargs  + 1)  + 12;
+  int *stackbottom = (int *) (PHYS_BASE - (argspace + pointerspace));
+  int i = 0;
+
+  /* Set the stack pointer */
+  *esp = stackbottom;
+  // Install the strings
+  memcpy (PHYS_BASE-argsz, args, argsz);
+  *stackbottom++ = 0;	      /* return address */
+  *stackbottom++ = nargs;    /* argc */
+  *stackbottom = (int) stackbottom + sizeof(char **); /*argv */
+  stackbottom++;
+
+  /* Contents of argv */
+  char **nextarg = (char **) stackbottom;
+  char *arg = (char *) (PHYS_BASE-argsz);
+
+  for ( i = 0; i < nargs; i++ ) {
+    *nextarg++ = arg;
+    /* find the start of the next argument.  This depends on the formatting in
+     * format_command_line */
+    while ( *arg != '\0') arg++;
+    arg++;
+  }
+  hex_dump (0,*esp, (argspace+pointerspace), true);
+
   return success;
+
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
