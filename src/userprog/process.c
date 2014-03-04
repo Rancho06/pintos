@@ -7,6 +7,7 @@
 #include <string.h>
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
+#include "userprog/process.h"
 #include "userprog/tss.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
@@ -86,9 +87,29 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid)
 {
-  return -1;
+  struct thread *cur = thread_current ();
+  struct thread *child = NULL;
+  struct list_elem *e;
+  int rv = -1;
+
+  for (e = list_begin (&cur->children); e != list_end (&cur->children);
+       e = list_next (e))
+    {
+      child = list_entry (e, struct thread, child_elem);
+
+      if ( child->tid == child_tid ) break;
+    }
+  /* No such child */
+  if ( e == list_end (&cur->children)) return -1;
+
+  /* Remove the child from our list of children and wait for it to terminate */
+  list_remove (e);
+  sema_down (&child->parent_sem);
+  rv = child->exit_status;
+  sema_up (&child->child_sem);
+  return rv;
 }
 
 /* Free the current process's resources. */
@@ -98,6 +119,16 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  /* First of all, let our parent know this thread is terminating */
+  sema_up (&cur->parent_sem);
+
+  /* Remove any children from our list of children and up their child_sem's so
+   * they can exit. */
+  while (! list_empty (&cur->children) ) {
+    struct thread *child = list_entry (list_pop_front (&cur->children),
+	  struct thread, child_elem);
+    sema_up (&child->child_sem);
+  }
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;

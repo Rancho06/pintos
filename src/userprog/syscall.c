@@ -6,6 +6,7 @@
 #include "threads/vaddr.h"
 
 #include <userprog/pagedir.h>
+#include <userprog/process.h>
 
 static void syscall_handler (struct intr_frame *);
 
@@ -60,14 +61,20 @@ static int
 unimplemented_syscall (struct syscall_signature *sig, struct thread *cur);
 
 static int
+exit_syscall (struct syscall_signature *sig, struct thread *cur);
+
+static int
+wait_syscall (struct syscall_signature *sig, struct thread *cur);
+
+static int
 write_syscall (struct syscall_signature *sig, struct thread *cur);
 
 typedef int (*syscall_impl)(struct syscall_signature *, struct thread *);
 syscall_impl syscall_implementation[MAX_SYSCALL+1] = {
   unimplemented_syscall,				/* SYS_HALT */
-  unimplemented_syscall,				/* SYS_EXIT */
+  exit_syscall,						/* SYS_EXIT */
   unimplemented_syscall,				/* SYS_EXEC */
-  unimplemented_syscall,				/* SYS_WAIT */
+  wait_syscall,						/* SYS_WAIT */
   unimplemented_syscall,				/* SYS_CREATE */
   unimplemented_syscall,				/* SYS_REMOVE */
   unimplemented_syscall,				/* SYS_OPEN */
@@ -151,7 +158,7 @@ unimplemented_syscall (struct syscall_signature *sig,
     print_param (&sig->param[i]);
 
   thread_exit ();
-  return 0;
+  NOT_REACHED ();
 }
 
 static int
@@ -173,6 +180,21 @@ write_syscall (struct syscall_signature *sig, struct thread *cur)
     printf ("Not yet\n");
     return -1;
   }
+}
+
+static int
+exit_syscall (struct syscall_signature *sig, struct thread *cur)
+{
+  cur->exit_status = sig->param[0].value.ival;
+  thread_exit ();
+  NOT_REACHED ();
+}
+
+
+static int
+wait_syscall (struct syscall_signature *sig, struct thread *cur UNUSED)
+{
+  return process_wait (sig->param[0].value.ival);
 }
 
 static void
