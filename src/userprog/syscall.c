@@ -155,14 +155,15 @@ unimplemented_syscall (struct syscall_signature *sig,
 }
 
 static int
-write_syscall (struct syscall_signature *sig, struct thread *cur UNUSED) {
-  if ( sig->param[0].ival == STDOUT_FILENO ) {
-    char *buf = (char *) sig->param[1].pval;
-    int lim = sig->param[2].ival;
+write_syscall (struct syscall_signature *sig, struct thread *cur)
+{
+  if ( sig->param[0].value.ival == STDOUT_FILENO ) {
+    char *buf = (char *) sig->param[1].value.pval;
+    int lim = sig->param[2].value.ival;
     int i = 0;
 
     for ( i = 0 ; i < lim; i++) 
-      if (!valid_addr (buf + i ) ) return -1;
+      if (!valid_addr (cur, buf + i ) ) return -1;
 
     /* Good buffer, put it out */
     putbuf (buf, lim);
@@ -196,12 +197,12 @@ syscall_handler (struct intr_frame *f)
     thread_exit ();
   }
 
-  printf ("Syscall %d\n", sysnum);
-
   sig = sigs[sysnum];
 
   get_args (&sig, iesp, cur);
   rv = syscall_implementation[sysnum] (&sig, cur);
 
-  thread_exit ();
+  if ( sig.has_rv ) f->eax = rv;
+  return;
+
 }
