@@ -101,6 +101,22 @@ valid_addr (struct thread *cur, void *vaddr)
 }
 
 static bool
+valid_buffer (struct thread *cur, char *vaddr, int lim, bool zeroed)
+{
+  int i = 0;
+  bool found_zero = false;
+
+  for (i = 0; i < lim; i++) {
+    if ( !valid_addr (cur, vaddr+i)) return false;
+    if ( zeroed && *vaddr == '\0' ) {
+      found_zero = true;
+      break;
+    }
+  }
+  return (zeroed) ? found_zero : true;
+}
+
+static bool
 get_args (struct syscall_signature *sig, void *esp, struct thread *cur)
 {
   int nvar = sig->nparams;
@@ -164,15 +180,17 @@ unimplemented_syscall (struct syscall_signature *sig,
 static int
 write_syscall (struct syscall_signature *sig, struct thread *cur)
 {
-  if ( sig->param[0].value.ival == STDOUT_FILENO ) {
-    char *buf = (char *) sig->param[1].value.pval;
-    int lim = sig->param[2].value.ival;
-    int i = 0;
+  int fd = sig->param[0].value.ival;
+  char *buf = (char *) sig->param[1].value.pval;
+  int lim = sig->param[2].value.ival;
 
-    for ( i = 0 ; i < lim; i++) 
-      if (!valid_addr (cur, buf + i ) ) return -1;
+  if ( fd == STDIN_FILENO )
+    return -1;
 
-    /* Good buffer, put it out */
+  if ( !valid_buffer (cur, buf, lim, false) )
+    return -1;
+
+  if ( fd == STDOUT_FILENO ) {
     putbuf (buf, lim);
     return lim;
   }
