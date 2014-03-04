@@ -15,26 +15,33 @@ static void syscall_handler (struct intr_frame *);
 #define MIN_SYSCALL SYS_HALT
 #define MAX_SYSCALL SYS_CLOSE
 
+/* The value of a parameter to a system call, either an integer or a pointer */
 union syscall_param_value {
   int ival;
   void *pval;
 };
 
+/* The type of a syscall parameter */
 enum syscall_param_type {
   SYSCALL_INT, SYSCALL_PTR
 };
 
+/* A syscall parameter.  A typed value */
 struct syscall_param {
   enum syscall_param_type type;
   union syscall_param_value value;
 };
 
+/* The signature of a system call.  The values of the params are filled in by
+ * parsing. */
 struct syscall_signature {
-  int nparams;
-  struct syscall_param param[MAX_SYSCALL_PARAMS];
-  bool has_rv;
+  int nparams;	  /* Number of parameters */
+  struct syscall_param param[MAX_SYSCALL_PARAMS]; /* Types and values of
+						     parameters */
+  bool has_rv;	  /* True if the call returns a value */
 };
 
+/* The signatures of all the system calls */
 struct syscall_signature sigs[MAX_SYSCALL+1] = {
   { 0 , {}, false},					/* SYS_HALT */
   { 1, { { SYSCALL_INT, { 0 } } }, false},		/* SYS_EXIT */
@@ -57,21 +64,29 @@ struct syscall_signature sigs[MAX_SYSCALL+1] = {
   { 1, { { SYSCALL_PTR, { 0 } } }, false},		/* SYS_CLOSE */
 };
 
+/* forward declarations of syscall implementations */
+
+/* An unimplemented call */
 static int
 unimplemented_syscall (struct syscall_signature *sig, struct thread *cur);
 
+/* Exit */
 static int
 exit_syscall (struct syscall_signature *sig, struct thread *cur);
 
+/* Exec */
 static int
 exec_syscall (struct syscall_signature *sig, struct thread *cur);
 
+/* Wait */
 static int
 wait_syscall (struct syscall_signature *sig, struct thread *cur);
 
+/* Write */
 static int
 write_syscall (struct syscall_signature *sig, struct thread *cur);
 
+/* Jump table of system calls, keyed by system call number */
 typedef int (*syscall_impl)(struct syscall_signature *, struct thread *);
 syscall_impl syscall_implementation[MAX_SYSCALL+1] = {
   unimplemented_syscall,				/* SYS_HALT */
@@ -90,12 +105,14 @@ syscall_impl syscall_implementation[MAX_SYSCALL+1] = {
 };
 
 
+/* Initialize the system call parts */
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
+/* Return true if vaddr is a valid user address in cur's page directory */
 static bool
 valid_addr (struct thread *cur, void *vaddr)
 {
@@ -103,6 +120,12 @@ valid_addr (struct thread *cur, void *vaddr)
       pagedir_get_page (cur->pagedir, vaddr) != NULL);
 }
 
+/* Return true if vaddr points to a valid user buffer of at most lim characters
+ * in cur's page directory.  If zeroed is false, all lim characters are
+ * checked.  If it is true, the checking stops at the first NUL ('\0')
+ * character.  If zeroed is true and the buffer is otherwise valid but contains
+ * no NUL ('\0') false is returned.
+ */
 static bool
 valid_buffer (struct thread *cur, char *vaddr, int lim, bool zeroed)
 {
@@ -119,6 +142,11 @@ valid_buffer (struct thread *cur, char *vaddr, int lim, bool zeroed)
   return (zeroed) ? found_zero : true;
 }
 
+/*
+ * Parse the signature from cur's address space starting from stack pointer
+ * esp.  Each parameter must be valid.  Value entries in the signature are
+ * overwritten.  Return true if the whole signature was parsed.
+ */
 static bool
 get_args (struct syscall_signature *sig, void *esp, struct thread *cur)
 {
@@ -130,6 +158,8 @@ get_args (struct syscall_signature *sig, void *esp, struct thread *cur)
     switch (sig->param[i].type) {
       case SYSCALL_PTR:
 	{
+	  /* Interpret esp as a pointer to a void *, get the void * into the
+	   * current parameter value and advnace esp */
 	  void **pesp = (void **) esp;
 	  sig->param[i].value.pval = *pesp;
 	  pesp++;
@@ -138,6 +168,8 @@ get_args (struct syscall_signature *sig, void *esp, struct thread *cur)
 	}
       case SYSCALL_INT:
 	{
+	  /* Interpret esp as a pointer to an int get the int into the
+	   * current parameter value and advnace esp */
 	  int *iesp = (int *) esp;
 	  sig->param[i].value.ival = *iesp;
 	  iesp++;
@@ -145,12 +177,14 @@ get_args (struct syscall_signature *sig, void *esp, struct thread *cur)
 	  break;
 	}
       default:
+	/* Unknown parameter type */
 	return false;
     }
   }
   return true;
 }
 
+/* Print the given parameter to the console for debugging */
 static void
 print_param (struct syscall_param *p)
 {
@@ -167,6 +201,7 @@ print_param (struct syscall_param *p)
   }
 }
 
+/* Unimplemented system call.  Print some diagnostics and bail */
 static int
 unimplemented_syscall (struct syscall_signature *sig,
     struct thread *cur UNUSED) {
@@ -180,6 +215,7 @@ unimplemented_syscall (struct syscall_signature *sig,
   NOT_REACHED ();
 }
 
+/* Write syscall implementation */
 static int
 write_syscall (struct syscall_signature *sig, struct thread *cur)
 {
@@ -203,6 +239,7 @@ write_syscall (struct syscall_signature *sig, struct thread *cur)
   }
 }
 
+/* Exit syscall implementation */
 static int
 exit_syscall (struct syscall_signature *sig, struct thread *cur)
 {
@@ -211,6 +248,7 @@ exit_syscall (struct syscall_signature *sig, struct thread *cur)
   NOT_REACHED ();
 }
 
+/* Exec syscall implementation */
 static int
 exec_syscall (struct syscall_signature *sig, struct thread *cur)
 {
@@ -220,12 +258,15 @@ exec_syscall (struct syscall_signature *sig, struct thread *cur)
   return process_execute (buf);
 }
 
+/* Wait syscall implementation */
 static int
 wait_syscall (struct syscall_signature *sig, struct thread *cur UNUSED)
 {
   return process_wait (sig->param[0].value.ival);
 }
 
+/* Look up the system call, parse the arguments from the user stack, and call
+ * the implementation. */
 static void
 syscall_handler (struct intr_frame *f) 
 {
