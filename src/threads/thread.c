@@ -12,6 +12,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #ifdef USERPROG
+#include "threads/malloc.h"
 #include "userprog/process.h"
 #endif
 
@@ -197,6 +198,15 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
+
+#ifdef USERPROG
+  int i = 0;
+  /* Allocate file descriptor table */
+  t->files = calloc (FDTABLESIZE, sizeof(struct file *));
+  /* NULL all the pointers.  Calloc doesn't technically do that. */
+  for ( i = 0 ; i < FDTABLESIZE; i++)
+    t->files[i] = NULL;
+#endif
 
   /* Add to run queue. */
   thread_unblock (t);

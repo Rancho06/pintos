@@ -118,6 +118,7 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  int i = 0;
 
   /* First of all, let our parent know this thread is terminating */
   sema_up (&cur->parent_sem);
@@ -129,6 +130,16 @@ process_exit (void)
 	  struct thread, child_elem);
     sema_up (&child->child_sem);
   }
+
+  /* Close any open files and release filedescriptor tables */
+  for (i = 0; i < FDTABLESIZE; i++)
+    if ( cur->files[i] ) {
+      file_close(cur->files[i]);
+      cur->files[i] = NULL;
+    }
+  free (cur->files);
+  cur->files = NULL;
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
