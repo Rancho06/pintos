@@ -64,6 +64,9 @@ static int
 exit_syscall (struct syscall_signature *sig, struct thread *cur);
 
 static int
+exec_syscall (struct syscall_signature *sig, struct thread *cur);
+
+static int
 wait_syscall (struct syscall_signature *sig, struct thread *cur);
 
 static int
@@ -73,7 +76,7 @@ typedef int (*syscall_impl)(struct syscall_signature *, struct thread *);
 syscall_impl syscall_implementation[MAX_SYSCALL+1] = {
   unimplemented_syscall,				/* SYS_HALT */
   exit_syscall,						/* SYS_EXIT */
-  unimplemented_syscall,				/* SYS_EXEC */
+  exec_syscall,						/* SYS_EXEC */
   wait_syscall,						/* SYS_WAIT */
   unimplemented_syscall,				/* SYS_CREATE */
   unimplemented_syscall,				/* SYS_REMOVE */
@@ -208,6 +211,14 @@ exit_syscall (struct syscall_signature *sig, struct thread *cur)
   NOT_REACHED ();
 }
 
+static int
+exec_syscall (struct syscall_signature *sig, struct thread *cur)
+{
+  char *buf = (char *) sig->param[1].value.pval;
+
+  if ( !valid_buffer (cur, buf, PGSIZE, true) ) return -1;
+  return process_execute (buf);
+}
 
 static int
 wait_syscall (struct syscall_signature *sig, struct thread *cur UNUSED)
