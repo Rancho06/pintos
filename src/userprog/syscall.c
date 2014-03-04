@@ -15,6 +15,9 @@ static void syscall_handler (struct intr_frame *);
 #define MIN_SYSCALL SYS_HALT
 #define MAX_SYSCALL SYS_CLOSE
 
+/* Filesystem GKL (Giant Kernel Lock) */
+struct lock fs_lock;
+
 /* The value of a parameter to a system call, either an integer or a pointer */
 union syscall_param_value {
   int ival;
@@ -110,6 +113,7 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init (&fs_lock);
 }
 
 /* Return true if vaddr is a valid user address in cur's page directory */
