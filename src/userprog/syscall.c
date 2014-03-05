@@ -352,7 +352,8 @@ exec_syscall (struct syscall_signature *sig, struct thread *cur)
 {
   char *buf = (char *) sig->param[1].value.pval;
 
-  if ( !valid_buffer (cur, buf, PGSIZE, true) ) return -1;
+  if ( !valid_buffer (cur, buf, PGSIZE, true) )
+    thread_exit ();
   return process_execute (buf);
 }
 
@@ -390,7 +391,7 @@ remove_syscall (struct syscall_signature *sig, struct thread *cur)
   int rv = 0;
 
   if ( !valid_buffer (cur, name, PGSIZE, true) )
-    return -1;
+    thread_exit ();
 
   lock_acquire (&fs_lock);
   rv = (int) filesys_remove (name);
@@ -409,7 +410,7 @@ open_syscall (struct syscall_signature *sig, struct thread *cur)
   int fd = 0;
 
   if ( !valid_buffer (cur, name, PGSIZE, true) )
-    return -1;
+    thread_exit ();
 
   if ( (fd = get_new_file (cur)) == -1)
     return -1;
@@ -454,7 +455,7 @@ read_syscall (struct syscall_signature *sig, struct thread *cur)
   int rv = -1;
 
   if ( !valid_buffer (cur, buf, lim, false) )
-    return -1;
+    thread_exit ();
 
   if ( fd == STDIN_FILENO ) {
     if ( lim == 0 ) return 0;
@@ -484,7 +485,7 @@ write_syscall (struct syscall_signature *sig, struct thread *cur)
   int rv = -1;
 
   if ( !valid_buffer (cur, buf, lim, false) )
-    return -1;
+    thread_exit ();
 
   if ( fd == STDOUT_FILENO ) {
     putbuf (buf, lim);
