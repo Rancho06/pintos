@@ -12,6 +12,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #ifdef USERPROG
+#include "threads/malloc.h"
 #include "userprog/process.h"
 #endif
 
@@ -198,6 +199,16 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+#ifdef USERPROG
+  int i = 0;
+  /* Allocate file descriptor table */
+  t->files = calloc (FDTABLESIZE, sizeof(struct file *));
+  /* NULL all the pointers.  Calloc doesn't technically do that. */
+  for ( i = 0 ; i < FDTABLESIZE; i++)
+    t->files[i] = NULL;
+  t->executable = NULL;
+#endif
+
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -281,17 +292,21 @@ void
 thread_exit (void) 
 {
   ASSERT (!intr_context ());
+  struct thread *cur = thread_current ();
 
 #ifdef USERPROG
   process_exit ();
 #endif
 
+  /* Wait for our parent to die or wait for us */
+  sema_down (&cur->child_sem);
+
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  list_remove (&thread_current()->allelem);
-  thread_current ()->status = THREAD_DYING;
+  list_remove (&cur->allelem);
+  cur->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
 }
@@ -462,7 +477,16 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->exit_status = -1;
+  list_init (&t->children);
+  sema_init (&t->parent_sem, 0);
+  sema_init (&t->child_sem, 0);
   t->magic = THREAD_MAGIC;
+
+  if ( t != initial_thread ) {
+    struct thread *cur =thread_current ();
+    list_push_back (&cur->children, &t->child_elem);
+  }
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
