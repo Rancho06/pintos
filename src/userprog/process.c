@@ -530,12 +530,29 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of
-   user virtual memory. */
+   user virtual memory. Install the arguments pointed to by args.  There are
+   argc of them, with a total size of argsz.  argsz is guaranteed to be <
+   PGSIZE */
 static bool
 setup_stack (void **esp, char *args, int nargs, int argsz)
 {
   uint8_t *kpage;
   bool success = false;
+
+  /* Space for all the argument strings and word alignment.  The  ?: just pads
+   * out to an even sizeof(uint32_t) - a 32-bit boundary */
+  int argspace = argsz + (
+      (argsz % sizeof(uint32_t) == 0) ?
+      0 : (sizeof(uint32_t) - (argsz % sizeof(uint32_t))));
+  /* space for all the pointers (including the null sentinel), argc, argv,
+   * and the return address.  This could be written as a shorter expression,
+   * but the nargs +1 is the actual argument pointers and the other three are
+   * explicitly written (the compiler will simplify it) */
+  int pointerspace = ( nargs  + 1)  * sizeof(char *) + 3 * sizeof(char *);
+
+  /* If this stack won't fit in a page, fail */
+  if ( argspace + pointerspace > PGSIZE)
+    return false;
 
   if ( !(kpage = palloc_get_page (PAL_USER | PAL_ZERO)) )
     return false;
@@ -547,11 +564,6 @@ setup_stack (void **esp, char *args, int nargs, int argsz)
     return success;
   }
   /* Lay out the stack */
-  /* Space for all the argument strings and word alignment */
-  int argspace = argsz + ((argsz % 4 == 0) ? 0 : (4 - (argsz % 4)));
-  /* space for all the pointers (including the null sentinel), argc, argv,
-   * and the return address */
-  int pointerspace = 4 * ( nargs  + 1)  + 12;
   int *stackbottom = (int *) (PHYS_BASE - (argspace + pointerspace));
   int i = 0;
 
