@@ -548,21 +548,19 @@ syscall_handler (struct intr_frame *f)
 
   ASSERT (cur && cur->pagedir);
 
-  if ( !valid_addr (cur, esp) ) {
-    printf ("Bad stack!?! %p\n", esp);
+  if (!valid_addr (cur, esp))
     thread_exit ();
-  }
+
   int *iesp = (int *) esp;
   int sysnum = *iesp++;
 
-  if ( sysnum < MIN_SYSCALL || sysnum > MAX_SYSCALL ) {
-    printf ("Unimplemented syscall %d\n", sysnum);
+  if ( sysnum < MIN_SYSCALL || sysnum > MAX_SYSCALL )
     thread_exit ();
-  }
 
   sig = sigs[sysnum];
 
-  get_args (&sig, iesp, cur);
+  if (!get_args (&sig, iesp, cur))
+    thread_exit ();
   rv = syscall_implementation[sysnum] (&sig, cur);
 
   if ( sig.has_rv ) f->eax = rv;

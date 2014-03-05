@@ -21,10 +21,15 @@
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
-static bool load (char *cmdline, void (**eip) (void), void **esp);
+static bool load (char *cmdline, int argc, int argsz, void (**eip) (void),
+    void **esp);
+static void
+format_command_line (char *start, int lim, int *argc, int *newlim);
 
 struct startup {
   char *filename;
+  int argc;
+  int argsz;
   struct semaphore started;
   bool success;
 };
@@ -46,9 +51,10 @@ process_execute (const char *file_name)
   if (s.filename == NULL)
     return TID_ERROR;
   strlcpy (s.filename, file_name, PGSIZE);
+  format_command_line (s.filename, PGSIZE, &s.argc, &s.argsz);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, &s);
+  tid = thread_create (s.filename, PRI_DEFAULT, start_process, &s);
   if (tid == TID_ERROR) {
     palloc_free_page (s.filename);
     return tid;
@@ -75,7 +81,7 @@ start_process (void *aux)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  s->success = load (s->filename, &if_.eip, &if_.esp);
+  s->success = load (s->filename, s->argc, s->argsz, &if_.eip, &if_.esp);
 
   /* Done with the filename */
   palloc_free_page (s->filename);
@@ -159,6 +165,7 @@ process_exit (void)
     }
   free (cur->files);
   cur->files = NULL;
+  printf ("%s: exit(%d)\n", thread_name (), cur->exit_status);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -298,15 +305,13 @@ format_command_line (char *start, int lim, int *argc, int *newlim)
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (char *file_name, void (**eip) (void), void **esp)
+load (char *file_name, int argc, int argsz, void (**eip) (void), void **esp)
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
   off_t file_ofs;
   bool success = false;
-  int argc = 0;
-  int argsz = 0;
   int i;
 
   /* Allocate and activate page directory. */
@@ -315,7 +320,6 @@ load (char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
-  format_command_line (file_name, PGSIZE, &argc, &argsz);
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
