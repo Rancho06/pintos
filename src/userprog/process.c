@@ -163,6 +163,8 @@ process_exit (void)
   free (cur->files);
   cur->files = NULL;
   printf ("%s: exit(%d)\n", thread_name (), cur->exit_status);
+  if ( cur->executable)
+    file_close (cur->executable);
 
 
   /* Destroy the current process's page directory and switch back
@@ -321,13 +323,14 @@ load (char *file_name, int argc, int argsz, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  file = filesys_open (file_name);
+  t->executable = file = filesys_open (file_name);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
 
+  file_deny_write (file);
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
@@ -411,7 +414,10 @@ load (char *file_name, int argc, int argsz, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  if (!success) {
+    file_close (file);
+    t->executable = NULL;
+  }
   return success;
 }
 

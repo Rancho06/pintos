@@ -118,7 +118,8 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    struct file **files;
+    struct file *executable;		/* The file we're running */
+    struct file **files;		/* Open files */
 #endif
 
     /* Owned by thread.c. */

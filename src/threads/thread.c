@@ -206,6 +206,7 @@ thread_create (const char *name, int priority,
   /* NULL all the pointers.  Calloc doesn't technically do that. */
   for ( i = 0 ; i < FDTABLESIZE; i++)
     t->files[i] = NULL;
+  t->executable = NULL;
 #endif
 
   /* Add to run queue. */
