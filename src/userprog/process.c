@@ -146,9 +146,6 @@ process_exit (void)
   uint32_t *pd;
   int i = 0;
 
-  /* First of all, let our parent know this thread is terminating */
-  sema_up (&cur->parent_sem);
-
   /* Remove any children from our list of children and up their child_sem's so
    * they can exit. */
   while (! list_empty (&cur->children) ) {
@@ -167,6 +164,7 @@ process_exit (void)
   cur->files = NULL;
   printf ("%s: exit(%d)\n", thread_name (), cur->exit_status);
 
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -183,6 +181,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  /* All done, let our parent know this thread is terminating */
+  sema_up (&cur->parent_sem);
 }
 
 /* Sets up the CPU for running user code in the current
