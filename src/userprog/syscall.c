@@ -352,7 +352,7 @@ exit_syscall (struct syscall_signature *sig, struct thread *cur)
 static int
 exec_syscall (struct syscall_signature *sig, struct thread *cur)
 {
-  char *buf = (char *) sig->param[1].value.pval;
+  char *buf = (char *) sig->param[0].value.pval;
 
   if ( !valid_buffer (cur, buf, PGSIZE, true) )
     thread_exit ();
