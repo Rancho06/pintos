@@ -1,6 +1,12 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+
+#include "devices/input.h"
+
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -85,9 +91,41 @@ exec_syscall (struct syscall_signature *sig, struct thread *cur);
 static int
 wait_syscall (struct syscall_signature *sig, struct thread *cur);
 
+/* Create */
+static int
+create_syscall (struct syscall_signature *sig, struct thread *cur);
+
+/* Remove */
+static int
+remove_syscall (struct syscall_signature *sig, struct thread *cur);
+
+/* Open */
+static int
+open_syscall (struct syscall_signature *sig, struct thread *cur);
+
+/* Filesize */
+static int
+filesize_syscall (struct syscall_signature *sig, struct thread *cur);
+
+/* Read */
+static int
+read_syscall (struct syscall_signature *sig, struct thread *cur);
+
 /* Write */
 static int
 write_syscall (struct syscall_signature *sig, struct thread *cur);
+
+/* Seek */
+static int
+seek_syscall (struct syscall_signature *sig, struct thread *cur);
+
+/* Tell */
+static int
+tell_syscall (struct syscall_signature *sig, struct thread *cur);
+
+/* Close */
+static int
+close_syscall (struct syscall_signature *sig, struct thread *cur);
 
 /* Jump table of system calls, keyed by system call number */
 typedef int (*syscall_impl)(struct syscall_signature *, struct thread *);
@@ -96,15 +134,15 @@ syscall_impl syscall_implementation[MAX_SYSCALL+1] = {
   exit_syscall,						/* SYS_EXIT */
   exec_syscall,						/* SYS_EXEC */
   wait_syscall,						/* SYS_WAIT */
-  unimplemented_syscall,				/* SYS_CREATE */
-  unimplemented_syscall,				/* SYS_REMOVE */
-  unimplemented_syscall,				/* SYS_OPEN */
-  unimplemented_syscall,				/* SYS_FILESIZE */
-  unimplemented_syscall,				/* SYS_READ */
+  create_syscall,					/* SYS_CREATE */
+  remove_syscall,					/* SYS_REMOVE */
+  open_syscall,						/* SYS_OPEN */
+  filesize_syscall,					/* SYS_FILESIZE */
+  read_syscall,						/* SYS_READ */
   write_syscall,					/* SYS_WRITE */
-  unimplemented_syscall,				/* SYS_SEEK */
-  unimplemented_syscall,				/* SYS_TELL */
-  unimplemented_syscall,				/* SYS_CLOSE */
+  seek_syscall,						/* SYS_SEEK */
+  tell_syscall,						/* SYS_TELL */
+  close_syscall,				      /* SYS_CLOSE */
 };
 
 
@@ -144,6 +182,72 @@ valid_buffer (struct thread *cur, char *vaddr, int lim, bool zeroed)
     }
   }
   return (zeroed) ? found_zero : true;
+}
+
+/*
+ * Get the struct file associated with descriptor number fd.  This may be NULL
+ * for a vairety of reasons - invalid fd or unopened/closed file for example.
+ */
+static struct file *
+get_file (struct thread *cur, int fd)
+{
+  if ( fd < FDBASE )
+    return NULL;
+
+  fd -= FDBASE;
+
+  if ( fd >= FDTABLESIZE)
+    return NULL;
+
+  if ( !cur->files )
+    return NULL;
+
+  return cur->files[fd];
+}
+
+/*
+ * get a valid file descriptor to make an assignment to.
+ */
+static int
+get_new_file (struct thread *cur)
+{
+  int fd = 0;
+
+  /* Defensive driving */
+  if ( !cur->files )
+    return -1;
+
+  /* Find a file descriptor */
+  while (fd < FDTABLESIZE )
+    if ( !cur->files[fd])
+      break;
+
+  /* No file descriptors left */
+  if ( fd == FDTABLESIZE )
+    return -1;
+
+  return fd + FDBASE;
+}
+
+/*
+ * Assign to a file, returns true if the fd was valid and the assignment made.
+ */
+static bool
+set_file (struct thread *cur, int fd, struct file *f)
+{
+  if ( fd < FDBASE )
+    return false;
+
+  fd -= FDBASE;
+
+  if ( fd >= FDTABLESIZE)
+    return false;
+
+  if ( !cur->files )
+    return false;
+
+  cur->files[fd] = f;
+  return true;
 }
 
 /*
@@ -218,31 +322,6 @@ unimplemented_syscall (struct syscall_signature *sig,
   thread_exit ();
   NOT_REACHED ();
 }
-
-/* Write syscall implementation */
-static int
-write_syscall (struct syscall_signature *sig, struct thread *cur)
-{
-  int fd = sig->param[0].value.ival;
-  char *buf = (char *) sig->param[1].value.pval;
-  int lim = sig->param[2].value.ival;
-
-  if ( fd == STDIN_FILENO )
-    return -1;
-
-  if ( !valid_buffer (cur, buf, lim, false) )
-    return -1;
-
-  if ( fd == STDOUT_FILENO ) {
-    putbuf (buf, lim);
-    return lim;
-  }
-  else {
-    printf ("Not yet\n");
-    return -1;
-  }
-}
-
 /* Exit syscall implementation */
 static int
 exit_syscall (struct syscall_signature *sig, struct thread *cur)
@@ -267,6 +346,194 @@ static int
 wait_syscall (struct syscall_signature *sig, struct thread *cur UNUSED)
 {
   return process_wait (sig->param[0].value.ival);
+}
+
+/* create syscall implementation */
+static int
+create_syscall (struct syscall_signature *sig, struct thread *cur)
+{
+  char *name = (char *) sig->param[0].value.pval;
+  unsigned int size = (unsigned int) sig->param[1].value.ival;
+  int rv = 0;
+
+  if ( !valid_buffer (cur, name, PGSIZE, true) )
+    return -1;
+
+  lock_acquire (&fs_lock);
+  rv = (int) filesys_create (name, size);
+  lock_release (&fs_lock);
+
+  return rv;
+}
+
+/* remove syscall implementation */
+static int
+remove_syscall (struct syscall_signature *sig, struct thread *cur)
+{
+  char *name = (char *) sig->param[0].value.pval;
+  int rv = 0;
+
+  if ( !valid_buffer (cur, name, PGSIZE, true) )
+    return -1;
+
+  lock_acquire (&fs_lock);
+  rv = (int) filesys_remove (name);
+  lock_release (&fs_lock);
+
+  return rv;
+}
+
+/* open syscall implementation.  Stash the opened file in an entry in the files
+ * table.  If no space, error. */
+static int
+open_syscall (struct syscall_signature *sig, struct thread *cur)
+{
+  char *name = (char *) sig->param[0].value.pval;
+  int fd = 0;
+
+  if ( !valid_buffer (cur, name, PGSIZE, true) )
+    return -1;
+
+  if ( (fd = get_new_file (cur)) == -1)
+    return -1;
+
+  lock_acquire (&fs_lock);
+  set_file (cur, fd, filesys_open (name));
+  lock_release (&fs_lock);
+
+  return fd;
+}
+
+/* Filesize implementation */
+static int
+filesize_syscall (struct syscall_signature *sig, struct thread *cur)
+{
+  int fd = sig->param[0].value.ival;
+  struct file *f = get_file (cur, fd);
+  int rv = -1;
+
+  if ( !f )
+    return -1;
+
+  lock_acquire (&fs_lock);
+  rv = file_length (f);
+  lock_release (&fs_lock);
+
+  return rv;
+}
+
+/* Read syscall implementation */
+static int
+read_syscall (struct syscall_signature *sig, struct thread *cur)
+{
+  int fd = sig->param[0].value.ival;
+  char *buf = (char *) sig->param[1].value.pval;
+  unsigned int lim = (unsigned int) sig->param[2].value.ival;
+  struct file *f = NULL;
+  int rv = -1;
+
+  if ( !valid_buffer (cur, buf, lim, false) )
+    return -1;
+
+  if ( fd == STDIN_FILENO ) {
+    if ( lim == 0 ) return 0;
+
+    buf[0] = input_getc ();
+    return 1;
+  }
+
+  if ( !(f = get_file (cur, fd)))
+      return -1;
+
+  lock_acquire (&fs_lock);
+  rv = file_read (f, buf, lim);
+  lock_release (&fs_lock);
+
+  return rv;
+}
+
+/* Write syscall implementation */
+static int
+write_syscall (struct syscall_signature *sig, struct thread *cur)
+{
+  int fd = sig->param[0].value.ival;
+  char *buf = (char *) sig->param[1].value.pval;
+  unsigned int lim = (unsigned int) sig->param[2].value.ival;
+  struct file *f = NULL;
+  int rv = -1;
+
+  if ( !valid_buffer (cur, buf, lim, false) )
+    return -1;
+
+  if ( fd == STDOUT_FILENO ) {
+    putbuf (buf, lim);
+    return lim;
+  }
+
+  if ( !(f = get_file (cur, fd)))
+      return -1;
+
+  lock_acquire (&fs_lock);
+  rv = file_write (f, buf, lim);
+  lock_release (&fs_lock);
+
+  return rv;
+}
+
+/* Seek implementation */
+static int
+seek_syscall (struct syscall_signature *sig, struct thread *cur)
+{
+  int fd = sig->param[0].value.ival;
+  unsigned int pos = (unsigned int) sig->param[1].value.ival;
+  struct file *f = get_file (cur, fd);
+
+  if ( !f )
+    return 0;
+
+  lock_acquire (&fs_lock);
+  file_seek (f, pos);
+  lock_release (&fs_lock);
+
+  return 0;
+}
+
+/* Tell implementation */
+static int
+tell_syscall (struct syscall_signature *sig, struct thread *cur)
+{
+  int fd = sig->param[0].value.ival;
+  struct file *f = get_file (cur, fd);
+  int rv = -1;
+
+  if ( !f )
+    return -1;
+
+  lock_acquire (&fs_lock);
+  rv = file_tell (f);
+  lock_release (&fs_lock);
+
+  return rv;
+}
+
+
+/* open syscall implementation.  make sure to clear the file
+ * descriptor entry.  */
+static int
+close_syscall (struct syscall_signature *sig, struct thread *cur)
+{
+  int fd = sig->param[0].value.ival;
+  struct file *f = get_file (cur, fd);
+
+  if ( !fd )
+    return 0;
+
+  lock_acquire (&fs_lock);
+  file_close (f);
+  lock_release (&fs_lock);
+  set_file (cur, fd, NULL);
+
+  return 0;
 }
 
 /* Look up the system call, parse the arguments from the user stack, and call
