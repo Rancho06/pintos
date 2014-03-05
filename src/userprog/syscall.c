@@ -180,8 +180,9 @@ valid_buffer (struct thread *cur, char *vaddr, int lim, bool zeroed)
   bool found_zero = false;
 
   for (i = 0; i < lim; i++) {
-    if ( !valid_addr (cur, vaddr+i)) return false;
-    if ( zeroed && *vaddr == '\0' ) {
+    if ( !valid_addr (cur, vaddr+i))
+      return false;
+    if ( zeroed && vaddr[i] == '\0' ) {
       found_zero = true;
       break;
     }
@@ -370,8 +371,9 @@ create_syscall (struct syscall_signature *sig, struct thread *cur)
   unsigned int size = (unsigned int) sig->param[1].value.ival;
   int rv = 0;
 
+  /* Terminate the process on a bad pointer */
   if ( !valid_buffer (cur, name, PGSIZE, true) )
-    return -1;
+    thread_exit ();
 
   lock_acquire (&fs_lock);
   rv = (int) filesys_create (name, size);
