@@ -6,6 +6,7 @@
 #include "filesys/filesys.h"
 
 #include "devices/input.h"
+#include "devices/shutdown.h"
 
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -79,6 +80,10 @@ struct syscall_signature sigs[MAX_SYSCALL+1] = {
 static int
 unimplemented_syscall (struct syscall_signature *sig, struct thread *cur);
 
+/* Halt */
+static int
+halt_syscall (struct syscall_signature *sig, struct thread *cur);
+
 /* Exit */
 static int
 exit_syscall (struct syscall_signature *sig, struct thread *cur);
@@ -130,7 +135,7 @@ close_syscall (struct syscall_signature *sig, struct thread *cur);
 /* Jump table of system calls, keyed by system call number */
 typedef int (*syscall_impl)(struct syscall_signature *, struct thread *);
 syscall_impl syscall_implementation[MAX_SYSCALL+1] = {
-  unimplemented_syscall,				/* SYS_HALT */
+  halt_syscall,						/* SYS_HALT */
   exit_syscall,						/* SYS_EXIT */
   exec_syscall,						/* SYS_EXEC */
   wait_syscall,						/* SYS_WAIT */
@@ -142,7 +147,7 @@ syscall_impl syscall_implementation[MAX_SYSCALL+1] = {
   write_syscall,					/* SYS_WRITE */
   seek_syscall,						/* SYS_SEEK */
   tell_syscall,						/* SYS_TELL */
-  close_syscall,				      /* SYS_CLOSE */
+  close_syscall,					/* SYS_CLOSE */
 };
 
 
@@ -322,6 +327,15 @@ unimplemented_syscall (struct syscall_signature *sig,
   thread_exit ();
   NOT_REACHED ();
 }
+
+/* Halt syscall implementation */
+static int
+halt_syscall (struct syscall_signature *sig UNUSED, struct thread *cur UNUSED)
+{
+  shutdown_power_off ();
+  NOT_REACHED ();
+}
+
 /* Exit syscall implementation */
 static int
 exit_syscall (struct syscall_signature *sig, struct thread *cur)
