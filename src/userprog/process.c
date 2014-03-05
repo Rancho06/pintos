@@ -537,17 +537,15 @@ setup_stack (void **esp, char *args, int nargs, int argsz)
   uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  if (kpage != NULL) 
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
-        *esp = PHYS_BASE;
-      else {
-        palloc_free_page (kpage);
-	return success;
-      }
-    }
+  if ( !(kpage = palloc_get_page (PAL_USER | PAL_ZERO)) )
+    return false;
+  success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+  if (success)
+    *esp = PHYS_BASE;
+  else {
+    palloc_free_page (kpage);
+    return success;
+  }
   /* Lay out the stack */
   /* Space for all the argument strings and word alignment */
   int argspace = argsz + ((argsz % 4 == 0) ? 0 : (4 - (argsz % 4)));
