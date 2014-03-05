@@ -1,0 +1,452 @@
+		     +--------------------------+
+       	       	     |		CS 140		|
+		     | PROJECT 2: USER PROGRAMS	|
+		     | 	   DESIGN DOCUMENT     	|
+		     +--------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Ted Faber <faber@isi.edu>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+			   ARGUMENT PASSING
+			   ================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+I didn't add any structures for this.  I parsed the arguments by hand in the frame and built the stack directly from them.
+
+---- ALGORITHMS ----
+
+>> A2: Briefly describe how you implemented argument parsing.  How do
+>> you arrange for the elements of argv[] to be in the right order?
+>> How do you avoid overflowing the stack page?
+
+Early in process_execute, I walk the page of string passed in and
+convert runs of spaces into single NULs ('\0') this only reduces the
+size of the arguments.  This is now basically what needs to go at the
+top of the stack.
+
+As I parse that, I count arguments and total size and return both of
+those values.
+
+When its time to create the stack, I have the space needed for strings
+and an argument count from the parsing routine.  The math to determine
+the size of the stack is straighforward - string space padded to a
+32-bit boundary + a pointer for each argument + a pointer for the
+sentinel + argc + argv + the return address.  Each pointer and int is 4
+bytes.  If that total is larger than the one-page stack, fail the
+process.
+
+Now set a pointer at the calculated bottom of the stack, install the
+return address, argc, and a pointer to an array of argc pointers on the
+stack.  Copy the strings in above all that.  Walk the strings and argv
+simultaneously, installing a pointer to each argument in the argv on the
+stack.  That's it.
+
+---- RATIONALE ----
+
+>> A3: Why does Pintos implement strtok_r() but not strtok()?
+
+strtok has a static internal pointer that is saved across calls to
+strtok.  Since subsequent calls could be from different threads on
+different strings in pintos, this would result in inconsistent results.
+In a word, it's not reentrant, and therefore useless in a multithreaded
+kernel.
+
+>> A4: In Pintos, the kernel separates commands into a executable name
+>> and arguments.  In Unix-like systems, the shell does this
+>> separation.  Identify at least two advantages of the Unix approach.
+
+The shell needs to parse and replace text in the lines users type
+anyway, so the kernel is replicating effor that the shell has already
+done.
+
+Putting the function in user programs allows programs to more easily
+pass arguments with spaces (or special characters in general) to the
+kernel.  In pintos there's no way to specify that "I love pintos" is a
+single argument.  Programs could reconstruct it, or the kernel could be
+modified to include a quoting syntax, but that's more work for either
+the program or the kernel.
+
+In general, putting complex quoting in the kernel ties
+all programs to that syntax.  It's kind of nice that perl and python
+have different quoting conventions for different uses.
+
+
+
+			     SYSTEM CALLS
+			     ============
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+Changes to struct thread:
+
+    /* Parent's list of children */
+    struct list children;
+
+    /* Thread's entry on parent's children list */
+    struct list_elem child_elem;
+
+    /* parent waits on this to get status */
+    struct semaphore parent_sem;
+
+    /* Child waits on this to throw away this struct */
+    struct semaphore child_sem;
+
+    /* Exit status */
+    int exit_status;
+
+ #ifdef USERPROG
+    uint32_t *pagedir;                 /* Page directory. */
+    struct file *executable;           /* The file we're running */
+    struct file **files;               /* Open files */
+#endif
+
+The process_execute chain uses this structure to communicate between the
+parent and child:
+
+/* Communications between the parent and child during startup.  The parent
+ * passes it to the child so it can load an executable and build a stack, and
+ * the child reports the success of that loading/starting in success.  started
+ * is used to synchronize. */
+struct startup {
+  char *filename;   /* Parsed filename and arguments to execute */
+  int argc;         /* Number of arguments */
+  int argsz;        /* Total size of arguments */
+  struct semaphore started; /* Parent waits on this for startup status */
+  bool success;     /* True if the child loaded the executable and began
+                       to run*/
+};
+
+These structs describe the signature of a system call and are used to
+parse the arguments from the user stack.  They're defined in syscall.c.
+
+/* The value of a parameter to a system call, either an integer or a pointer */
+union syscall_param_value {
+  int ival;
+  void *pval;
+};
+
+/* The type of a syscall parameter */
+enum syscall_param_type {
+  SYSCALL_INT, SYSCALL_PTR
+};
+
+/* A syscall parameter.  A typed value */
+struct syscall_param {
+  enum syscall_param_type type;
+  union syscall_param_value value;
+};
+
+/* The signature of a system call.  The values of the params are filled in by
+ * parsing. */
+struct syscall_signature {
+  int nparams;	  /* Number of parameters */
+  struct syscall_param param[MAX_SYSCALL_PARAMS]; /* Types and values of
+						     parameters */
+  bool has_rv;	  /* True if the call returns a value */
+};
+
+/* The signatures of all the system calls */
+struct syscall_signature sigs[MAX_SYSCALL+1] = {
+  { 0 , {}, false},					/* SYS_HALT */
+  { 1, { { SYSCALL_INT, { 0 } } }, false},		/* SYS_EXIT */
+  { 1, { { SYSCALL_PTR, { 0 } } }, true},		/* SYS_EXEC */
+  { 1, { { SYSCALL_INT, { 0 } } }, true},		/* SYS_WAIT */
+  { 2, { { SYSCALL_PTR, { 0 } },
+	 { SYSCALL_INT, { 0 } } }, true},		/* SYS_CREATE */
+  { 1, { { SYSCALL_PTR, { 0 } } }, true},		/* SYS_REMOVE */
+  { 1, { { SYSCALL_PTR, { 0 } } }, true},		/* SYS_OPEN */
+  { 1, { { SYSCALL_PTR, { 0 } } }, true},		/* SYS_FILESIZE */
+  { 3, { { SYSCALL_INT, { 0 } },
+	 { SYSCALL_PTR, { 0 } },
+	 { SYSCALL_INT, { 0 } } }, true},		/* SYS_READ */
+  { 3, { { SYSCALL_INT, { 0 } },
+	 { SYSCALL_PTR, { 0 } },
+	 { SYSCALL_INT, { 0 } } }, true},		/* SYS_WRITE */
+  { 2, { { SYSCALL_INT, { 0 } },
+	 { SYSCALL_INT, { 0 } } }, false},		/* SYS_SEEK */
+  { 1, { { SYSCALL_PTR, { 0 } } }, true},		/* SYS_TELL */
+  { 1, { { SYSCALL_PTR, { 0 } } }, false},		/* SYS_CLOSE */
+};
+
+There's also a dispatch table for syscalls:
+
+
+/* Jump table of system calls, keyed by system call number */
+typedef int (*syscall_impl)(struct syscall_signature *, struct thread *);
+syscall_impl syscall_implementation[MAX_SYSCALL+1] = {
+  halt_syscall,						/* SYS_HALT */
+  exit_syscall,						/* SYS_EXIT */
+  exec_syscall,						/* SYS_EXEC */
+  wait_syscall,						/* SYS_WAIT */
+  create_syscall,					/* SYS_CREATE */
+  remove_syscall,					/* SYS_REMOVE */
+  open_syscall,						/* SYS_OPEN */
+  filesize_syscall,					/* SYS_FILESIZE */
+  read_syscall,						/* SYS_READ */
+  write_syscall,					/* SYS_WRITE */
+  seek_syscall,						/* SYS_SEEK */
+  tell_syscall,						/* SYS_TELL */
+  close_syscall,					/* SYS_CLOSE */
+};
+
+and a global lock to lock the filesystem.
+
+/* Filesystem GKL (Giant Kernel Lock) */
+struct lock fs_lock;
+
+>> B2: Describe how file descriptors are associated with open files.
+>> Are file descriptors unique within the entire OS or just within a
+>> single process?
+
+File descriptors are indices into a per-process table of open files.
+They are per-process.
+
+---- ALGORITHMS ----
+
+>> B3: Describe your code for reading and writing user data from the
+>> kernel.
+
+I use is_user_vaddr () and pagedir_get_page () to validate data and
+buffers passed from user space.  Individual ints are checked directly.
+Buffers are checked by iterating across the passed buffer and checking
+each destination address.  If an explicit limit is given, each address
+from the buffer start to the last byte is confirmed.  If a string is
+passed, the buffer up to the trailing NUL ('\0') is checked.  A
+NUL-terminated string can be at most PGSIZE bytes in my implementation.
+Strings longer than that are treated as memory errors.
+
+Once validated, the kernel access user memory directly.
+
+>> B4: Suppose a system call causes a full page (4,096 bytes) of data
+>> to be copied from user space into the kernel.  What is the least
+>> and the greatest possible number of inspections of the page table
+>> (e.g. calls to pagedir_get_page()) that might result?  What about
+>> for a system call that only copies 2 bytes of data?  Is there room
+>> for improvement in these numbers, and how much?
+
+In my current implementation, 4096 touches would happen.  The best case
+would be one touch for an aligned page checked in one swoop.
+
+Currently I check both bytes as well, and the best case would again be 1
+touch.
+
+>> B5: Briefly describe your implementation of the "wait" system call
+>> and how it interacts with process termination.
+
+Wait uses 2 semaphores to coordinate between the waiting process and the
+terminating process, named for the process that waits on them parent_sem
+and child_sem.  These are in the thread's struct thread and initialized
+to 0.
+
+In addition each parent keeps track of its children in a list in its
+struct thread.  Only a parent adds or removes children from this list,
+so there is no race.  The semaphores above guarantee that the struct
+thread's of the children are no deallocated until the parent removes
+them from the child list.
+
+When a child terminates it V's the parent_sem in its struct thread when
+it completes process_exit().  That routine cleans up all process related
+resources (including removing all the children from the child list and
+Ving all the child_sems of the exiting processes children).  This lets
+any waiting parent know it can claim the exit status from teh exiting
+thread's struct thread.  When that parent does so it will V the exiting
+thread's child_sem.
+
+Immediately after process_exit() the exiting thread P's the
+child_sem in its struct thread.  Note that if this processes parent has
+either waited on this process or terminated, this P will immediately
+return.
+
+Waiting parents wait on the exiting process's parent_sem.  When
+released, they remove the child from the list, gather the status, and V
+the child_sem, allowing it to complete termination.
+
+If a parent waits before a child completes, the parent is waiting on
+parent_sem when the child exits.  The child awakens the parent after
+process_exit() and before it completes termination and waits for the
+parent to get the status and take the child of the parent's child list.
+The parent wakes up, does so, and releases the child.  Because these are
+semaphores, none of these wakeups get lost.
+
+If the child exits before the parent waits, the child cleans up in
+process_exit(), Vs the parent_sem and waits on the child_sem.  A parent
+waiting on the child will pass the parent_sem immediately, gather status
+and remove the child, and then release the child by Ving child_sem.
+
+If the parent exits before the child exits, the parent removes all
+children from its child list and Vs their semaphores.  When each child
+exits it does now block when it Ps its parent sem after process_exit()
+and completes directly.
+
+
+
+>> B6: Any access to user program memory at a user-specified address
+>> can fail due to a bad pointer value.  Such accesses must cause the
+>> process to be terminated.  System calls are fraught with such
+>> accesses, e.g. a "write" system call requires reading the system
+>> call number from the user stack, then each of the call's three
+>> arguments, then an arbitrary amount of user memory, and any of
+>> these can fail at any point.  This poses a design and
+>> error-handling problem: how do you best avoid obscuring the primary
+>> function of code in a morass of error-handling?  Furthermore, when
+>> an error is detected, how do you ensure that all temporarily
+>> allocated resources (locks, buffers, etc.) are freed?  In a few
+>> paragraphs, describe the strategy or strategies you adopted for
+>> managing these issues.  Give an example.
+
+Each system call starts by validating memory.  If the user has screwed
+up data, the syscall calls thread_exit () for the caller.  That path -
+through thread exit - cleans up all the open files, memory, etc of the
+process. 
+
+As for locks and other resources used in the syscall, the memory checks
+are done before any of those are allocated, so thread_exit() releases
+everything.
+
+Here's write:
+
+/* Write syscall implementation */
+static int
+write_syscall (struct syscall_signature *sig, struct thread *cur)
+{
+  int fd = sig->param[0].value.ival;
+  char *buf = (char *) sig->param[1].value.pval;
+  unsigned int lim = (unsigned int) sig->param[2].value.ival;
+  struct file *f = NULL;
+  int rv = -1;
+
+  if ( !valid_buffer (cur, buf, lim, false) )
+    thread_exit ();
+
+  if ( fd == STDOUT_FILENO ) {
+    putbuf (buf, lim);
+    return lim;
+  }
+
+  if ( !(f = get_file (cur, fd)))
+      return -1;
+
+  lock_acquire (&fs_lock);
+  rv = file_write (f, buf, lim);
+  lock_release (&fs_lock);
+
+  return rv;
+}
+
+No resources are allocated until the entire buffer is validated and the
+fd is known to be good.  (The fd, buf, and lim variables are all
+validated by the caller, that similarly fails if they are bad).  Once
+the lock is acquired, I know write_file will complete successfully and
+the last resources can be deallocated.
+
+
+---- SYNCHRONIZATION ----
+
+>> B7: The "exec" system call returns -1 if loading the new executable
+>> fails, so it cannot return before the new executable has completed
+>> loading.  How does your code ensure this?  How is the load
+>> success/failure status passed back to the thread that calls "exec"?
+
+The parent process passes the parameters necessary to load and start the
+new process in a startup structure (above) that includes a semaphore.
+While the child is loading itself the parent waits on the semaphore.
+When the child has either successfully loaded itself and built its stack
+or failed to do so, it sets a return value in that structure and Vs the
+semaphore.  The parent inspects it, discards it and sets the return
+value appropriately.
+
+
+>> B8: Consider parent process P with child process C.  How do you
+>> ensure proper synchronization and avoid race conditions when P
+>> calls wait(C) before C exits?  After C exits?  How do you ensure
+>> that all resources are freed in each case?  How about when P
+>> terminates without waiting, before C exits?  After C exits?  Are
+>> there any special cases?
+
+I've done my best to get rid of special cases here.  The path that each
+of those processes takes through the
+
+thread_exit() 
+ process_exit()
+schedule()
+ thread_schedule_tail()
+
+sequence is always the same whether the kernel terminates them
+abnormally or from exit().  That sequence cleans up all kernel-allocated
+resources - open files are closed, memory is released, child lists
+cleared, etc.
+
+The different wait sequences are discussed in detail in B5, and should
+bear this out.
+
+---- RATIONALE ----
+
+>> B9: Why did you choose to implement access to user memory from the
+>> kernel in the way that you did?
+
+I'm lazy.
+
+It seemed the simplest direct approach.  I should tune it up to minimize
+page table accesses, and it will need to be cleaned up for large buffers
+in virtual memory.
+
+>> B10: What advantages or disadvantages can you see to your design
+>> for file descriptors?
+
+It's a simple setup.  It does allocate a sizeable chunk of memory for
+each process (256 pointers) but reads and writes are very efficient in
+terms of that data structure.  Dereferencing a table entry is fast.
+
+It should be allowed to grow dynamically, and perhaps be tuned.  I've
+isolated the use of the table in functions, so changing the
+implementation should be easy.
+
+>> B11: The default tid_t to pid_t mapping is the identity mapping.
+>> If you changed it, what advantages are there to your approach?
+
+No change.
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future quarters or the remaining projects?
+
+>> Any other comments?
