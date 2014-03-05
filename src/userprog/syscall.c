@@ -224,9 +224,11 @@ get_new_file (struct thread *cur)
     return -1;
 
   /* Find a file descriptor */
-  while (fd < FDTABLESIZE )
+  while (fd < FDTABLESIZE ) {
     if ( !cur->files[fd])
       break;
+    fd++;
+  }
 
   /* No file descriptors left */
   if ( fd == FDTABLESIZE )
