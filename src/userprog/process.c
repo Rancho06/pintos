@@ -30,12 +30,17 @@ format_command_line (char *start, int lim, int *argc, int *newlim);
 /* To lock the file system while reading the executable */
 extern struct lock fs_lock;
 
+/* Communications between the parent and child during startup.  The parent
+ * passes it to the child so it can load an executable and build a stack, and
+ * the child reports the success of that loading/starting in success.  started
+ * is used to synchronize. */
 struct startup {
-  char *filename;
-  int argc;
-  int argsz;
-  struct semaphore started;
-  bool success;
+  char *filename;   /* Parsed filename and arguments to execute */
+  int argc;	    /* Number of arguments */
+  int argsz;	    /* Total size of arguments */
+  struct semaphore started; /* Parent waits on this for startup status */
+  bool success;	    /* True if the child loaded the executable and began to
+		       to run*/
 };
 
 /* Starts a new thread running a user program loaded from
