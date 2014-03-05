@@ -405,6 +405,7 @@ static int
 open_syscall (struct syscall_signature *sig, struct thread *cur)
 {
   char *name = (char *) sig->param[0].value.pval;
+  struct file *opened = NULL;
   int fd = 0;
 
   if ( !valid_buffer (cur, name, PGSIZE, true) )
@@ -414,9 +415,13 @@ open_syscall (struct syscall_signature *sig, struct thread *cur)
     return -1;
 
   lock_acquire (&fs_lock);
-  set_file (cur, fd, filesys_open (name));
+  opened = filesys_open (name);
   lock_release (&fs_lock);
 
+  if ( !opened)
+    return -1;
+
+  set_file (cur, fd, opened);
   return fd;
 }
 
