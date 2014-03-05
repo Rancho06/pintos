@@ -17,6 +17,7 @@
 #include "threads/interrupt.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
+#include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
@@ -25,6 +26,9 @@ static bool load (char *cmdline, int argc, int argsz, void (**eip) (void),
     void **esp);
 static void
 format_command_line (char *start, int lim, int *argc, int *newlim);
+
+/* To lock the file system while reading the executable */
+extern struct lock fs_lock;
 
 struct startup {
   char *filename;
@@ -322,6 +326,7 @@ load (char *file_name, int argc, int argsz, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  lock_acquire (&fs_lock);
   /* Open executable file. */
   t->executable = file = filesys_open (file_name);
   if (file == NULL) 
@@ -418,6 +423,7 @@ load (char *file_name, int argc, int argsz, void (**eip) (void), void **esp)
     file_close (file);
     t->executable = NULL;
   }
+  lock_release (&fs_lock);
   return success;
 }
 
