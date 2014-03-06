@@ -33,7 +33,7 @@ all: $(PROGS)
 define TEMPLATE
 $(1)_OBJ = $(patsubst %.c,%.o,$(patsubst %.S,%.o,$($(1)_SRC)))
 $(1): $$($(1)_OBJ) $$(LIB) $$(LDSCRIPT)
-	$$(CC) $$(LDFLAGS) $$($(1)_OBJ) $$(LIB) -o $$@
+	$$(CC) $$(MFLAG) $$(LDFLAGS) $$($(1)_OBJ) $$(LIB) -o $$@
 endef
 
 $(foreach prog,$(PROGS),$(eval $(call TEMPLATE,$(prog))))
