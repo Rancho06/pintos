@@ -200,12 +200,7 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
 #ifdef USERPROG
-  int i = 0;
-  /* Allocate file descriptor table */
-  t->files = calloc (FDTABLESIZE, sizeof(struct file *));
-  /* NULL all the pointers.  Calloc doesn't technically do that. */
-  for ( i = 0 ; i < FDTABLESIZE; i++)
-    t->files[i] = NULL;
+  init_files (t);
   t->executable = NULL;
 #endif
 

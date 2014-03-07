@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #include "userprog/tss.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
@@ -153,7 +154,6 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-  int i = 0;
 
   /* Remove any children from our list of children and up their child_sem's so
    * they can exit. */
@@ -163,14 +163,7 @@ process_exit (void)
     sema_up (&child->child_sem);
   }
 
-  /* Close any open files and release filedescriptor tables */
-  for (i = 0; i < FDTABLESIZE; i++)
-    if ( cur->files[i] ) {
-      file_close(cur->files[i]);
-      cur->files[i] = NULL;
-    }
-  free (cur->files);
-  cur->files = NULL;
+  close_all_files (cur);
   printf ("%s: exit(%d)\n", thread_name (), cur->exit_status);
   if ( cur->executable)
     file_close (cur->executable);
