@@ -219,7 +219,8 @@ struct lock fs_lock;
 >> Are file descriptors unique within the entire OS or just within a
 >> single process?
 
-File descriptors are indices into a per-process table of open files.
+File descriptors are indices into a per-process table of open files
+(though the table is really a linked list of tables).
 They are per-process.
 
 ---- ALGORITHMS ----
@@ -414,13 +415,12 @@ in virtual memory.
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
 
-It's a simple setup.  It does allocate a sizeable chunk of memory for
-each process (256 pointers) but reads and writes are very efficient in
-terms of that data structure.  Dereferencing a table entry is fast.
+The file descriptors are allocated in sets of 31 file descriptors in a
+table.  If a table fills up, a new table is allocated and linked to that
+one.
 
-It should be allowed to grow dynamically, and perhaps be tuned.  I've
-isolated the use of the table in functions, so changing the
-implementation should be easy.
+It grows dynamically, which is an advantage, at the cost of longer
+lookups and allocations.
 
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
