@@ -1,0 +1,294 @@
+
+Welcome to project0.  This project is worth 0 points, but I strongly
+encourage you to complete it anyway.  The project is intended to:
+
+    * Encourage you to set up and become more comfortable with the class
+      infrastructure.  Namely:
+
+      o The 350 Virtual Machine in which your work will be graded
+      o The git repositories in which you will manage your code
+
+    * Give you some experience with differences between C and Java that
+      are most relevant to the kind of code you will be writing in 350.
+      This is primarily code that manipulates the machine representation
+      of numbers and addresses/pointers including pointers to functions.
+
+    * Give you experience reading other people's C code - in this case
+      mine.
+
+C and Java
+
+You are probably fairly familiar with Java at this point.  Java's syntax
+borrows heavily from C (by way of C++), especially when dealing with
+primitive types like ints and chars.  The key differences for 350 are
+that C encourages direct manipulation of memory addresses (pointers),
+and that there is no direct support for object-oriented programming
+support.
+
+The widespread use of memory addresses in C is because C compiles
+directly into CPU instructions that run on the physical CPU.  Java
+produces a set of bytecodes that can be run by interpreters that
+translate to the local CPU's instructions.  Java introduces layers of
+abstraction that C explicitly removes.
+
+In 350 you will make widespread use of that ability to get cozy with the
+hardware.
+
+Learning C
+
+350 is not a C class, so we will not be spending time in class walking
+through the definition of the language and how to write basic code.  You
+are all talented computer scientists in one of the foremost engineering
+schools in the country; you're going to learn C on your own.
+
+The web is (unsurprisingly) full of C tutorials that you can take and
+learn from.  http://learn-c.org covers some nice key points, for
+example.  Google (or Bing or Yahoo) will lead you to many more.  Should
+you like the feel of paper in your hands, the seminal work on C is _The
+C Programming Language, Second Edition_.  If the engineering library
+does not have a copy, please let me know.  (The book is somewhat
+storied: http://en.wikipedia.org/wiki/The_C_Programming_Language )
+
+As you dig into the oddities of this assignment and others this
+semester, I strongly recommend the comp.lang.c FAQ at http://c-faq.com/ .
+It is very well written and navigates the details of the specifications
+very well.  I rarely visit that site without learning something, and
+I've been programming in C for nearly 30 years.
+
+Though I don't plan to spend time in class teaching C from scratch, I
+am happy to answer questions about specific problems.  You are welcome
+to bring them to piazza, office hours, TA office hours, or just ask in
+class.  As I alluded to above, C has many corner cases and I am happy to
+help you navigate them.
+
+The Assignment
+
+The assignment consists of understanding and modifying some C code.
+Here's what we want you to do.  You need to get the code first, but you
+can do the others in any order you like.
+
+Include your answers to the questions below in a file called DESIGN that
+you will check in with your code.
+
+Get the code
+
+Follow the procedure for getting code that is given at
+http://www.isi.edu/~faber/cs350/git.html . The examples there for
+modifying code use file names from later assignments, but if you
+substitute file names you see the examples all work.
+
+Compiling the code
+
+The repository includes a file called Makefile that tells the Linux make
+program how to make executable programs from the source code.  If you cd
+into the project0 directory and type make, you can see that happen.
+
+$ make
+cc -O2 -pipe    explain.c  -o explain
+cc -O2 -pipe    out.c  -o out
+cc -O2 -pipe    sort.c  -o sort
+cc -fpack-struct=1 struct.c -o struct8
+cc -fpack-struct=2 struct.c -o struct16
+cc -fpack-struct=4 struct.c -o struct32
+
+Lines preceded by a $ are typed at the shell, the others are output.
+
+All the code, except explain.c, is heavily commented.  In fact the code
+is well over-commented to help you understand it.  Read the source code
+in each section to understand it.  When you comment your own code,
+similarly over-comment it so we can be sure you understood what you were
+doing.
+
+Modify out.c to pass a pointer parameter by reference
+
+The program out (created from out.c) demonstrates using a pointer to
+modify a variable outside a local function.  The average() function
+modifies the variable that has its address stored in the out_param
+parameter.  You can see this run by:
+
+$ ./out
+Average: 9.5
+
+Lines preceded by a $ are typed at the shell, the others are output.
+Your mission here is to understand what that routine does and then
+create a new routine that copies the value of a pointer (passed by
+value) into a pointer variable outside your new function.  Include code
+in your main that shows that the assignment in the function propagated
+the value outside the function.
+
+My version produces this output:
+
+$ ./out
+Average: 9.5
+Before copy pointers differ (0x0, 0x600cd0)
+After copy pointers are the same (0x600cd0, 0x600cd0)
+
+Your values for the addresses will differ.
+
+Comment your code and include a description in DESIGN about what you
+did.
+
+Modify sort to sort in reverse order and to sort by the number of set bits
+
+The sort.c program initializes a small array of integers and uses the
+system qsort() function to sort them.  qsort decides how to sort the
+array based in the output of a comparison function that is a parameter
+to the routine.  As presented sort.c defines a 1-element array with a
+pointer to the comparison function compare_ab().
+
+When you run sort, you see the original 100 element array (which is
+sorted), then the array scrambled, then the array sorted (in ascending,
+low to high) order.  The output looks like this:
+
+$ ./sort
+
+000 001 002 003 004 005 006 007 008 009 
+010 011 012 013 014 015 016 017 018 019 
+020 021 022 023 024 025 026 027 028 029 
+030 031 032 033 034 035 036 037 038 039 
+040 041 042 043 044 045 046 047 048 049 
+050 051 052 053 054 055 056 057 058 059 
+060 061 062 063 064 065 066 067 068 069 
+070 071 072 073 074 075 076 077 078 079 
+080 081 082 083 084 085 086 087 088 089 
+090 091 092 093 094 095 096 097 098 099 
+
+076 091 007 054 004 025 066 034 094 030 
+018 064 005 029 073 059 006 063 089 057 
+024 098 022 019 065 092 085 017 009 020 
+074 086 053 060 014 062 036 055 071 012 
+011 041 033 043 044 082 027 068 045 035 
+038 021 078 048 003 031 088 046 042 015 
+008 039 028 016 002 067 052 097 023 000 
+032 058 037 040 079 075 049 077 069 087 
+080 010 013 084 050 096 047 072 056 081 
+026 001 083 090 051 095 061 070 093 099 
+
+000 001 002 003 004 005 006 007 008 009 
+010 011 012 013 014 015 016 017 018 019 
+020 021 022 023 024 025 026 027 028 029 
+030 031 032 033 034 035 036 037 038 039 
+040 041 042 043 044 045 046 047 048 049 
+050 051 052 053 054 055 056 057 058 059 
+060 061 062 063 064 065 066 067 068 069 
+070 071 072 073 074 075 076 077 078 079 
+080 081 082 083 084 085 086 087 088 089 
+090 091 092 093 094 095 096 097 098 099 
+
+
+Your mission is to write 2 new comparison functions.  The first one must
+reverse the order of the sort - make it a descending sort.  The second
+comparison function will make the sort reorder the array based on the
+number of 1 bits set in an unsigned integer representation of the
+integers.  Correct output looks like:
+
+./sort
+
+000 001 002 003 004 005 006 007 008 009 
+010 011 012 013 014 015 016 017 018 019 
+020 021 022 023 024 025 026 027 028 029 
+030 031 032 033 034 035 036 037 038 039 
+040 041 042 043 044 045 046 047 048 049 
+050 051 052 053 054 055 056 057 058 059 
+060 061 062 063 064 065 066 067 068 069 
+070 071 072 073 074 075 076 077 078 079 
+080 081 082 083 084 085 086 087 088 089 
+090 091 092 093 094 095 096 097 098 099 
+
+082 061 026 048 087 005 049 063 093 009 
+042 091 045 090 038 015 013 017 072 010 
+019 021 059 032 080 068 018 024 065 084 
+040 058 050 002 033 025 036 098 078 085 
+029 041 035 001 006 096 007 094 074 011 
+070 073 075 043 016 053 097 057 056 077 
+060 064 000 031 062 044 014 067 088 069 
+076 071 055 012 089 047 092 022 023 079 
+052 081 028 083 039 034 054 027 099 020 
+003 037 066 046 004 095 086 008 030 051 
+
+000 001 002 003 004 005 006 007 008 009 
+010 011 012 013 014 015 016 017 018 019 
+020 021 022 023 024 025 026 027 028 029 
+030 031 032 033 034 035 036 037 038 039 
+040 041 042 043 044 045 046 047 048 049 
+050 051 052 053 054 055 056 057 058 059 
+060 061 062 063 064 065 066 067 068 069 
+070 071 072 073 074 075 076 077 078 079 
+080 081 082 083 084 085 086 087 088 089 
+090 091 092 093 094 095 096 097 098 099 
+
+099 098 097 096 095 094 093 092 091 090 
+089 088 087 086 085 084 083 082 081 080 
+079 078 077 076 075 074 073 072 071 070 
+069 068 067 066 065 064 063 062 061 060 
+059 058 057 056 055 054 053 052 051 050 
+049 048 047 046 045 044 043 042 041 040 
+039 038 037 036 035 034 033 032 031 030 
+029 028 027 026 025 024 023 022 021 020 
+019 018 017 016 015 014 013 012 011 010 
+009 008 007 006 005 004 003 002 001 000 
+
+000 064 001 004 002 032 008 016 040 048 
+009 010 012 080 017 018 003 020 005 072 
+006 024 096 068 066 065 033 034 036 037 
+098 097 088 084 082 081 076 074 073 070 
+069 067 056 052 050 049 044 042 041 038 
+035 028 026 025 022 021 019 014 013 011 
+007 078 085 015 058 030 046 045 092 043 
+029 086 027 099 083 071 023 089 090 075 
+060 057 077 039 054 053 051 091 061 062 
+031 087 094 055 079 047 093 059 063 095 
+
+Comment your code and explain what you did in the DESIGN file.
+
+Modify struct.c to portably output a data structure
+
+A struct in C is pretty analogous to a Java class with only public
+members and no methods.  In C these are used to represent formatted
+blocks of memory.  Because many different machine architectures support
+C, the mapping between that data structure and the contents of memory is
+a little ambiguous.
+
+The code in struct.c initializes and outputs a simple structure to a
+file.  The Makefile compiles it into 3 different executables, each of
+which interprets that data structure slightly differently. Your mission
+is to write a single routine that writes the same encoding of the data
+structure no matter how the code is compiled.
+
+The struct program takes one command line argument and writes its
+version of the data structure to the file system with that name.  You
+can inspect that data structure using the hd (hexdump) command.  Here is
+some example output:
+
+$ ./struct16 out16
+$ hd ./out16 
+00000000  01 02 00 00 00 03 00 01  00 00 00 02 00 00 00 03 |................|
+00000010  00 00 00 04 00 00 00 05  00 00 00 06 00 00 00 07 |................|
+00000020  00 00 00 08 00 00 00 09  00 00 00 0a 00 00 00 0b |................|
+00000030  00 00 00 0c 00 00 00 0d  00 00 00 0e 00 00 00 0f |................|
+*
+00000040
+
+The "*" indicates that the lines above are all zeroes.  You should read
+the code carefully.  It may help you in interpreting that code to know
+that the Intel CPUs you are using are Little Endian:
+http://en.wikipedia.org/wiki/Endianness
+
+Notice that the three struct programs produce different size files:
+
+$ ./struct8 out8
+$ ./struct16 out16
+$ ./struct32 out32
+$ ls -l out8 out16 out32
+-rw-r--r--  1 faber  faber  68 Jan 14 18:00 out16
+-rw-r--r--  1 faber  faber  72 Jan 14 18:00 out32
+-rw-r--r--  1 faber  faber  67 Jan 14 18:00 out8
+
+Correct code will produce the same 67-byte file in all cases.
+
+Comment your code and explain your approach in DESIGN.
+
+Explain the output from explain.c
+
+Explain.c is uncommented code.  Figure out what it does and explain it
+in DESIGN.  Consider it a scavenger hunt of C behavior.
