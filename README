@@ -99,6 +99,8 @@ in each section to understand it.  When you comment your own code,
 similarly over-comment it so we can be sure you understood what you were
 doing.
 
+----
+
 Modify out.c to pass a pointer parameter by reference
 
 The program out (created from out.c) demonstrates using a pointer to
@@ -127,6 +129,8 @@ Your values for the addresses will differ.
 
 Comment your code and include a description in DESIGN about what you
 did.
+
+----
 
 Modify sort to sort in reverse order and to sort by the number of set bits
 
@@ -241,6 +245,8 @@ integers.  Correct output looks like:
 
 Comment your code and explain what you did in the DESIGN file.
 
+----
+
 Modify struct.c to portably output a data structure
 
 A struct in C is pretty analogous to a Java class with only public
@@ -287,6 +293,8 @@ $ ls -l out8 out16 out32
 Correct code will produce the same 67-byte file in all cases.
 
 Comment your code and explain your approach in DESIGN.
+
+----
 
 Explain the output from explain.c
 
