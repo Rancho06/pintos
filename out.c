@@ -18,9 +18,17 @@ void average(int *a, int size, double *out_param) {
     *out_param = (double) tot/size;
 }
 
+
+void assign(int ptr_address, int* out_ptr) {
+    *out_ptr = ptr_address;
+}
+
+
+
 /* Initialize a with the integers from 0 to ASIZE-1 and call average on it.
  * Print the result. */
 int main(int argc, char **argv) {
+    /* Old routine */
     int i = 0;
     double avg = 0.0;
 
@@ -29,4 +37,14 @@ int main(int argc, char **argv) {
 
     average(a, ASIZE, &avg);
     printf("Average: %g\n", avg);
+
+    /* New routine */
+    int num = 5;
+    int* num_ptr = &num;
+    int* new_ptr = NULL;
+    printf("Before copy pointers differ (%x, %x)\n", new_ptr, num_ptr);
+
+    assign(num_ptr, &new_ptr);    
+    printf("After copy pointers are the same (%x, %x)\n", new_ptr, num_ptr);
+
 }
