@@ -18,14 +18,15 @@ void average(int *a, int size, double *out_param) {
     *out_param = (double) tot/size;
 }
 
-
+/* assign the value stored in ptr_address to the variable pointed to by out_ptr */
 void assign(int ptr_address, int* out_ptr) {
     *out_ptr = ptr_address;
 }
 
 
 
-/* Initialize a with the integers from 0 to ASIZE-1 and call average on it.
+/* Old routine: Initialize a with the integers from 0 to ASIZE-1 and call average on it.
+ * New routine: Declare two pointers pointing to different addresses, and call assign() to let them point to the same address.
  * Print the result. */
 int main(int argc, char **argv) {
     /* Old routine */
