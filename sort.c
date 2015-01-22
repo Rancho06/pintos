@@ -8,7 +8,7 @@
 /* ASIZE is the size of the array to sort (number of 32-bit integers) */
 #define ASIZE 100
 /* NFCNS is the number of different sort functions defined in the comp array */
-#define NFCNS 1
+#define NFCNS 3
 
 /* defines the type compare_fcn to be a pointer to a function that takes two
  * constant void pointers and returns an integer. */
@@ -58,12 +58,42 @@ void dump_array(uint32_t *a, int size) {
  */
 
 /*
- * Compare the elements pointed to b a and b to each other as 32-bit integers.
+ * Compare the elements pointed to by a and b to each other as 32-bit integers.
  */
 int compare_ab(const void *a, const void *b) {
     const uint32_t *aa = (const uint32_t *) a;
     const uint32_t *bb = (const uint32_t *) b;
     return *aa - *bb;
+}
+
+/*
+ * Compare the elements pointed to by a and b and returns < 0 if first element is larger than the second.
+ */
+int reverse_order_compare(const void *a, const void *b) {
+    const uint32_t *aa = (const uint32_t *) a;
+    const uint32_t *bb = (const uint32_t *) b;
+    return *bb - *aa;
+}
+
+/*
+ * Given a uint32 number, returns the number of 1 bit in its binary form.
+ */
+int num_of_one_bit(uint32_t num) {
+    int count = 0;
+    while (num != 0) {
+        count += (num % 2);
+        num /= 2;
+    }
+    return count;
+}
+
+/*
+ * Compare the elements pointed to by a and b and returns < 0 if the number of 1 bit in a's binary form is fewer than that of b's.
+ */
+int bit_set_compare(const void *a, const void *b) {
+    const uint32_t *aa = (const uint32_t *) a;
+    const uint32_t *bb = (const uint32_t *) b;
+    return num_of_one_bit(*aa) - num_of_one_bit(*bb);
 }
 
 /* Definition of the array to sort */
@@ -86,7 +116,8 @@ int main(int argc, char **argv) {
 
     /* Initialize function table */
     comp[0] = compare_ab;
-
+    comp[1] = reverse_order_compare;
+    comp[2] = bit_set_compare;
     dump_array(a, ASIZE);
 
     /* Permute */
