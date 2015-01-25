@@ -44,6 +44,15 @@ int write_buf(int f, void *buf, int size) {
     return 0;
 }
 
+/*
+ * Copy a chunk of data of size length from source into the address ptr_dest points to, and increments the data ptr_dest points to by size.
+ */
+void copy_data(void* source, uint8_t** ptr_dest, int size) {
+    bcopy(source, *ptr_dest, size);   
+    *ptr_dest += size;
+}
+
+
 int main(int argc, char **argv) {
     int f = -1;		    /* File descriptor for output */
     struct example ex;	    /* An example structure */
@@ -65,10 +74,30 @@ int main(int argc, char **argv) {
 
     /* Allocate the output buffer and use bcopy to directly copy the stucture.
      * You will need to modify this code. */
-    if ( (buf = malloc(sizeof(ex))) == NULL) fatal("malloc");
-    bcopy(&ex, buf, sizeof(ex));
 
-    if ( write_buf(f, buf, sizeof(ex))) fatal("write");
+    /* Calculate the actual size of struct example it needs to be allocated by adding up the size of all the member variables in the struct. */
+    int size_of_buf = 0;
+    size_of_buf += sizeof(ex.byte);
+    size_of_buf += sizeof(ex.int32);
+    size_of_buf += sizeof(ex.int16);
+    size_of_buf += sizeof(ex.some[i]) * 15;
+
+    /* Make sure malloc is successful, otherwise print error message */
+    if ( (buf = malloc(size_of_buf)) == NULL) fatal("malloc");
+
+    /* Call copy_data on each member variable in the struct */
+    copy_data(&(ex.byte), &buf, sizeof(ex.byte));
+    copy_data(&(ex.int32), &buf, sizeof(ex.int32));
+    copy_data(&(ex.int16), &buf, sizeof(ex.int16));
+    for (i = 0; i < 15; i++) {
+        copy_data(&(ex.some[i]), &buf, sizeof(ex.some[i]));
+    }
+
+    //bcopy(&ex, buf, sizeof(ex));
+    
+    /* Write to the file */
+    buf -= size_of_buf;
+    if ( write_buf(f, buf, size_of_buf)) fatal("write");
     close(f);
 
     /* C does not garbage collect buf.  All malloc-ed (or otherwise allocated)
