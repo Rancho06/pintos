@@ -1,0 +1,47 @@
+Name: Shu Zhou
+USC Email: shuzhou@usc.edu
+
+
+This file explains the logic of out.c, sort.c, struct.c and explain.c
+
+-------------------------------------
+
+out.c
+
+I added an assign() function to assign the value of old pointer to the new pointer. I passed the value of old pointer by value and passed the address of the new pointer into the function. In this way, the function can modify the value of the new pointer.
+
+-------------------------------------
+
+sort.c
+
+To sort based on the reverse order, I just simply return (*bb - *aa) rather than (*aa - *bb), which gives the exact opposite sign.
+
+To sort based on the number of 1 bit, I call a function named num_of_one_bit() to return the number of one bit in the binary form of a given uint32_t number.
+
+-------------------------------------
+
+struct.c
+
+I copy the struct example into the buffer piece by piece.
+
+I call copy_data on each member variable and update the copy address with the size of each member variable.
+
+-------------------------------------
+
+explain.c
+
+This program demonstrates the little endian system, which stores the least significant byte into the smallest address such as:
+
+in a 32-bit system
+
+03020100
+07060504
+...
+...
+
+This is in contrast with the Big endian system, which stores the least significant byte into the biggest address such as:
+
+00010203
+04050607
+...
+...
