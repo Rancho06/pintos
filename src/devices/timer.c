@@ -206,6 +206,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
     }
     sema_up(&sleep_queue_lock);
   }
+  
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
