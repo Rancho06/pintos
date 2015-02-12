@@ -70,6 +70,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+static bool less_than(struct list_elem* first, struct list_elem* second, void* aux);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -490,10 +491,16 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list))
+  if (list_empty (&ready_list)) {
     return idle_thread;
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  }
+  struct list_elem *temp = list_max(&ready_list, less_than, 0);
+  struct thread* nextThread = list_entry(temp, struct thread, elem);
+  enum intr_level old_level = intr_disable ();
+  list_remove(temp);
+  intr_set_level (old_level);
+  return nextThread;
+  //return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -582,3 +589,12 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+static bool less_than(struct list_elem* first, struct list_elem* second, void* aux) {
+  struct thread* firstThread = list_entry(first, struct thread, elem);
+  struct thread* secondThread = list_entry(second, struct thread, elem);
+  /*if (firstThread->priority == secondThread->priority) {
+    return (firstThread->tid < secondThread->tid);
+  }*/
+  return (firstThread->priority < secondThread->priority);
+}
