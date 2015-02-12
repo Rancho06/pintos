@@ -238,9 +238,29 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  //if (t != idle_thread) {
+    list_push_back (&ready_list, &t->elem);
+  //}
   t->status = THREAD_READY;
+  
+  if ((thread_current() != idle_thread) && (t->priority > thread_current()->priority)) {
+    thread_yield();
+  }
   intr_set_level (old_level);
+  /*if ((t != idle_thread) && (current != idle_thread)) {
+    if (!intr_context() && (t->priority > current->priority)) {
+      thread_yield();       
+    }
+
+  }*/
+  /*if ((thread_current() != idle_thread) && (!list_empty(&ready_list))) {
+    struct thread* current = running_thread();
+    struct list_elem* max_elem = list_max(&ready_list, less_than, 0);
+    struct thread* max_thread = list_entry(max_elem, struct thread, elem);
+    if (current->priority <= max_thread->priority) {
+      thread_yield();
+    }
+  }*/
 }
 
 /* Returns the name of the running thread. */
@@ -336,7 +356,20 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  
+  if (new_priority < thread_current()->priority) {
+    thread_current ()->priority = new_priority;
+    struct thread* current = running_thread();
+    struct list_elem* max_elem = list_max(&ready_list, less_than, 0);
+    struct thread* max_thread = list_entry(max_elem, struct thread, elem);
+    if (current->priority < max_thread->priority) {
+      thread_yield();
+    }
+  }
+  else {
+    thread_current ()->priority = new_priority;
+  }
+  
 }
 
 /* Returns the current thread's priority. */
@@ -496,9 +529,9 @@ next_thread_to_run (void)
   }
   struct list_elem *temp = list_max(&ready_list, less_than, 0);
   struct thread* nextThread = list_entry(temp, struct thread, elem);
-  enum intr_level old_level = intr_disable ();
+  //enum intr_level old_level = intr_disable ();
   list_remove(temp);
-  intr_set_level (old_level);
+  //intr_set_level (old_level);
   return nextThread;
   //return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
