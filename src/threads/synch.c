@@ -34,7 +34,9 @@
 
 static bool thread_less_than(struct list_elem* first, struct list_elem* second, void* aux);
 static bool sema_less_than(struct list_elem* first, struct list_elem* second, void* aux);
-
+static bool lock_less_than(struct list_elem* first, struct list_elem* second, void* aux);
+static bool list_contains(const struct list* list, const struct list_elem* elem);
+static void nested_priority_check(struct list* list, int priority);
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -184,6 +186,7 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
+  lock->lock_level = 0;
   sema_init (&lock->semaphore, 1);
 }
 
@@ -201,9 +204,24 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
-
+  struct thread* current = thread_current();
+  if (lock->holder != NULL) {
+    if(current->priority > lock->holder->priority) {
+      lock->holder->priority = current->priority;
+      lock->lock_level = current->priority;
+      nested_priority_check(&(lock->holder->wait_locks), current->priority);
+      if (!list_contains(&(lock->holder->hold_locks), &(lock->hold_elem))) {
+        list_push_back(&(lock->holder->hold_locks), &(lock->hold_elem));
+        list_push_back(&(current->wait_locks), &(lock->wait_elem));
+      }
+    }
+  }
   sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
+  lock->holder = thread_current();
+  lock->lock_level = current->priority;
+  if(list_contains(&(current->wait_locks), &(lock->wait_elem))) {
+    list_remove(&(lock->wait_elem));
+  }
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -236,9 +254,28 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-
+  struct thread* current = thread_current();
   lock->holder = NULL;
+  lock->lock_level = 0;
+  if(list_contains(&(current->hold_locks), &(lock->hold_elem))) {
+    list_remove(&(lock->hold_elem));
+    if (list_size(&(current->hold_locks)) == 0) {
+      current->priority = current->old_priority;
+    }
+    else {
+      struct list_elem* temp = list_max(&(current->hold_locks), lock_less_than, 0);
+      current->priority = list_entry(temp, struct lock, hold_elem)->lock_level;
+    }
+  }
+  
+  
+  
   sema_up (&lock->semaphore);
+  
+  /*if(current->priority != current->old_priority) {
+    thread_set_priority(current->old_priority);
+  }*/
+  
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -354,17 +391,41 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 static bool thread_less_than(struct list_elem* first, struct list_elem* second, void* aux) {
   struct thread* firstThread = list_entry(first, struct thread, elem);
   struct thread* secondThread = list_entry(second, struct thread, elem);
-  /*if (firstThread->priority == secondThread->priority) {
-    return (firstThread->tid < secondThread->tid);
-  }*/
   return (firstThread->priority < secondThread->priority);
 }
 
 static bool sema_less_than(struct list_elem* first, struct list_elem* second, void* aux) {
   struct semaphore_elem* firstSema = list_entry(first, struct semaphore_elem, elem);
   struct semaphore_elem* secondSema = list_entry(second, struct semaphore_elem, elem);
-  /*if (firstThread->priority == secondThread->priority) {
-    return (firstThread->tid < secondThread->tid);
-  }*/
   return (firstSema->thread->priority < secondSema->thread->priority);
+}
+
+static bool lock_less_than(struct list_elem* first, struct list_elem* second, void* aux) {
+  struct lock* firstLock = list_entry(first, struct lock, hold_elem);
+  struct lock* secondLock = list_entry(second, struct lock, hold_elem);
+  return (firstLock->lock_level < secondLock->lock_level);
+}
+
+static bool list_contains(const struct list* list, const struct list_elem* elem) {
+  struct list_elem* p;
+  for (p = list_begin (list); p != list_end (list); p = list_next (p)) {
+    if (p == elem) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void nested_priority_check(struct list* list, int priority) {
+  if (list_size(list) == 0) {
+    return;
+  }
+  struct list_elem* p;
+  for (p = list_begin (list); p != list_end (list); p = list_next (p)) {
+    struct lock* lock = list_entry(p, struct lock, wait_elem);
+    if (lock->holder->priority < priority) {
+      lock->holder->priority = priority;
+    }
+    nested_priority_check(&(lock->holder->wait_locks), priority);
+  }
 }

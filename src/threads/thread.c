@@ -167,6 +167,7 @@ tid_t
 thread_create (const char *name, int priority,
                thread_func *function, void *aux) 
 {
+  
   struct thread *t;
   struct kernel_thread_frame *kf;
   struct switch_entry_frame *ef;
@@ -239,14 +240,16 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   //if (t != idle_thread) {
-    list_push_back (&ready_list, &t->elem);
+  list_push_back (&ready_list, &t->elem);
   //}
   t->status = THREAD_READY;
+  intr_set_level (old_level);
   
-  if ((thread_current() != idle_thread) && (t->priority > thread_current()->priority)) {
+  if (!intr_context() && (thread_current() != idle_thread) && (t->priority > thread_current()->priority)) {
+
     thread_yield();
   }
-  intr_set_level (old_level);
+  
   /*if ((t != idle_thread) && (current != idle_thread)) {
     if (!intr_context() && (t->priority > current->priority)) {
       thread_yield();       
@@ -356,9 +359,25 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  
-  if (new_priority < thread_current()->priority) {
-    thread_current ()->priority = new_priority;
+  struct thread* current = thread_current();
+  current->old_priority = new_priority;
+  if (list_size(&(current->hold_locks)) == 0) {
+    if (new_priority < current->priority) {
+      current->priority = new_priority;
+      struct list_elem* max_elem = list_max(&ready_list, less_than, 0);
+      struct thread* max_thread = list_entry(max_elem, struct thread, elem);
+      if (current->priority < max_thread->priority) {
+        thread_yield();
+      }
+    }
+    else {
+      current->priority = new_priority;
+    }
+  }
+
+  /*if (new_priority < thread_current()->priority) {
+    thread_current()->priority = new_priority;
+    thread_current()->old_priority = new_priority;
     struct thread* current = running_thread();
     struct list_elem* max_elem = list_max(&ready_list, less_than, 0);
     struct thread* max_thread = list_entry(max_elem, struct thread, elem);
@@ -367,9 +386,10 @@ thread_set_priority (int new_priority)
     }
   }
   else {
-    thread_current ()->priority = new_priority;
+    thread_current()->priority = new_priority;
+    thread_current()->old_priority = new_priority;
   }
-  
+  */
 }
 
 /* Returns the current thread's priority. */
@@ -496,7 +516,11 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->old_priority = priority;
   t->magic = THREAD_MAGIC;
+
+  list_init(&(t->hold_locks));
+  list_init(&(t->wait_locks));
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
