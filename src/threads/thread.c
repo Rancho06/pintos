@@ -239,31 +239,17 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  //if (t != idle_thread) {
   list_push_back (&ready_list, &t->elem);
-  //}
   t->status = THREAD_READY;
   intr_set_level (old_level);
   
-  if (!intr_context() && (thread_current() != idle_thread) && (t->priority > thread_current()->priority)) {
-
+  /* If the newly unblocked thread has a higher priority, current thread yeilds */
+  struct thread* current = thread_current();
+  if (!intr_context() && (current != idle_thread) && (t->priority > current->priority)) {
     thread_yield();
   }
   
-  /*if ((t != idle_thread) && (current != idle_thread)) {
-    if (!intr_context() && (t->priority > current->priority)) {
-      thread_yield();       
-    }
-
-  }*/
-  /*if ((thread_current() != idle_thread) && (!list_empty(&ready_list))) {
-    struct thread* current = running_thread();
-    struct list_elem* max_elem = list_max(&ready_list, less_than, 0);
-    struct thread* max_thread = list_entry(max_elem, struct thread, elem);
-    if (current->priority <= max_thread->priority) {
-      thread_yield();
-    }
-  }*/
+  
 }
 
 /* Returns the name of the running thread. */
@@ -355,18 +341,21 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-/* Sets the current thread's priority to NEW_PRIORITY. */
+/* Sets the current thread's priority to NEW_PRIORITY.
+   If current thread is being donated, only update the old_priority 
+   If not being donated, also update the priority. Immediately check if current thread needs to yield. */
 void
 thread_set_priority (int new_priority) 
 {
   struct thread* current = thread_current();
   current->old_priority = new_priority;
+
   if (list_size(&(current->hold_locks)) == 0) {
     if (new_priority < current->priority) {
       current->priority = new_priority;
       struct list_elem* max_elem = list_max(&ready_list, less_than, 0);
       struct thread* max_thread = list_entry(max_elem, struct thread, elem);
-      if (current->priority < max_thread->priority) {
+      if (!intr_context() && (current->priority < max_thread->priority)) {
         thread_yield();
       }
     }
@@ -374,29 +363,13 @@ thread_set_priority (int new_priority)
       current->priority = new_priority;
     }
   }
-
-  /*if (new_priority < thread_current()->priority) {
-    thread_current()->priority = new_priority;
-    thread_current()->old_priority = new_priority;
-    struct thread* current = running_thread();
-    struct list_elem* max_elem = list_max(&ready_list, less_than, 0);
-    struct thread* max_thread = list_entry(max_elem, struct thread, elem);
-    if (current->priority < max_thread->priority) {
-      thread_yield();
-    }
-  }
-  else {
-    thread_current()->priority = new_priority;
-    thread_current()->old_priority = new_priority;
-  }
-  */
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return thread_current()->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -647,11 +620,13 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-static bool less_than(struct list_elem* first, struct list_elem* second, void* aux) {
+
+/* Returns true if the second thread has a higher priority
+   This function is passed into the list_max() as the second parameter.
+ */
+static bool
+less_than (struct list_elem* first, struct list_elem* second, void* aux) {
   struct thread* firstThread = list_entry(first, struct thread, elem);
   struct thread* secondThread = list_entry(second, struct thread, elem);
-  /*if (firstThread->priority == secondThread->priority) {
-    return (firstThread->tid < secondThread->tid);
-  }*/
   return (firstThread->priority < secondThread->priority);
 }
