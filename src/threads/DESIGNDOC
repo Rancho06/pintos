@@ -29,26 +29,62 @@ Shu Zhou <shuzhou@usc.edu>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+typedef struct my_timer {
+  int64_t ticks; 			// the time that timer wakes up thread
+  struct semaphore lock;	// # times a timer can be hold without blocking
+  struct list_elem elem;	// list element
+} Timer;
+Basically, I want a structure to take care of the process of sleeping/waking a thread.
+
+static struct list sleep_queue;
+Need to know which threads are sleeping right now.
+
+static struct semaphore sleep_queue_lock; // the lock access to sleeping list
+Need to synchronize/protect access to shared sleep_queue
+
+
+
+
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
+/* timer_sleep() */
+Construct a timer struct and push_back the current thread to the sleeping queue. Then sema_down the timer's semaphore to block the current thread.
+
+/* timer_interrupt() */
+If time passed the wake-up time, sema_up the timer's semaphore to wake up the thread. Also remove the thread from the sleeping queue.
+
+
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+I used the provided list_remove function. This is tested to be much faster than implementing the deletion ourselves. That's also why I add list_elem in Timer.
+
+
+
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
+The only shared data is the global sleep_queue. So I use a semaphore to guarantee only one access at a time.
+
 
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+I used sema_try_down instead of sema_down in timer_interrupt(). So if interrupt occurs during timer_sleep(), it just skips this round and waits for the next interrupt.
+
+
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+Using sema_try_down is better than just simply diable the interrupt for timer_sleep. Apparently diabling the interrupt would solve race condition but not the smartest way. To me, this logic makes more sense.
+
+
 
 			 PRIORITY SCHEDULING
 			 ===================
