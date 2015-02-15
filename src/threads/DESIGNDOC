@@ -103,12 +103,29 @@ Using sema_try_down is better than just simply diable the interrupt for timer_sl
 
 >> B3: How do you ensure that the highest priority thread waiting for
 >> a lock, semaphore, or condition variable wakes up first?
+In smea_up(), I always pick the waiting thread with the highest priority using list_max().
+
+
 
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
+1. Level up the priority of the thread holding the lock
+2. Update the priority of this lock
+3. Handle nested donation by checking whether the donated thread is being blocked by others.
+4. Add this lock to lock holder's holidng lock lists and current thread's waiting lock lists if the lock doesn't exist in lock holder's holding list
+5. sema_down and block myself
+
+
 
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
+1. remove the lock from current thread's holding list
+2. if this is the last holding donation-related lock, set priority to original priority. If not, set priority to be the max of the remaining lock's priority.
+3. call sema_up() and unblock another thread.
+
+
+
+
 
 ---- SYNCHRONIZATION ----
 
@@ -116,10 +133,14 @@ Using sema_try_down is better than just simply diable the interrupt for timer_sl
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
+I disabled interrupt to protect shared resource: ready_list. When I am getting the max thread from ready_list, an interrupt could potentially change it.
+I don't think a lock is appropriate since interrupt is not a thread type. It cannot be blocked using locks.
+
 ---- RATIONALE ----
 
 >> B7: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+This design is safe and efficient. Also, it doesn't have a limit of nested level since every thread will automatically trace back. 
 
 			  ADVANCED SCHEDULER
 			  ==================
