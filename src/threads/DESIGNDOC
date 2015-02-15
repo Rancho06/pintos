@@ -95,9 +95,30 @@ Using sema_try_down is better than just simply diable the interrupt for timer_sl
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+struct lock 
+  {
+    struct list_elem hold_elem; /* List element for donation-related lock hold */
+    struct list_elem wait_elem; /* List element for donation-related lock waited */
+    int lock_level;             /* The highest priority waiting on this lock */
+  };
+
+ struct thread
+  {
+    int old_priority;                   /* The original priority in the case of donation */
+
+    struct list hold_locks;             /* List for all donation-related locks that this thread holds but some higher priority threads acquire */ 
+
+    struct list wait_locks;             /* List for all donation-related locks that this thread is blocked by a lower priority thread */
+  };
+
+
+
 >> B2: Explain the data structure used to track priority donation.
 >> Use ASCII art to diagram a nested donation.  (Alternately, submit a
 >> .png file.)
+
+
+
 
 ---- ALGORITHMS ----
 
@@ -141,6 +162,15 @@ I don't think a lock is appropriate since interrupt is not a thread type. It can
 >> B7: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
 This design is safe and efficient. Also, it doesn't have a limit of nested level since every thread will automatically trace back. 
+
+
+
+
+
+
+
+
+
 
 			  ADVANCED SCHEDULER
 			  ==================
