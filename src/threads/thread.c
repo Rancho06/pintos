@@ -496,7 +496,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 
   list_init(&(t->hold_locks));
-  list_init(&(t->wait_locks));
+  t->wait_lock = NULL;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -527,13 +527,12 @@ next_thread_to_run (void)
   if (list_empty (&ready_list)) {
     return idle_thread;
   }
+  enum intr_level old_level = intr_disable();
   struct list_elem *temp = list_max(&ready_list, less_than, 0);
   struct thread* nextThread = list_entry(temp, struct thread, elem);
-  //enum intr_level old_level = intr_disable ();
   list_remove(temp);
-  //intr_set_level (old_level);
+  intr_set_level(old_level);
   return nextThread;
-  //return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
 /* Completes a thread switch by activating the new thread's page

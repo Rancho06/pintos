@@ -23,7 +23,6 @@ struct lock
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
     struct list_elem hold_elem; /* List element for donation-related lock hold */
-    struct list_elem wait_elem; /* List element for donation-related lock waited */
     int lock_level;             /* The highest priority waiting on this lock */
   };
 

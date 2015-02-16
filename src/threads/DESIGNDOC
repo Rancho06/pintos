@@ -98,7 +98,6 @@ Using sema_try_down is better than just simply diable the interrupt for timer_sl
 struct lock 
   {
     struct list_elem hold_elem; /* List element for donation-related lock hold */
-    struct list_elem wait_elem; /* List element for donation-related lock waited */
     int lock_level;             /* The highest priority waiting on this lock */
   };
 
@@ -108,7 +107,7 @@ struct lock
 
     struct list hold_locks;             /* List for all donation-related locks that this thread holds but some higher priority threads acquire */ 
 
-    struct list wait_locks;             /* List for all donation-related locks that this thread is blocked by a lower priority thread */
+    struct lock wait_lock;             /* the lock current thread is waiting on. NULL if nothing */
   };
 
 
@@ -132,10 +131,11 @@ In smea_up(), I always pick the waiting thread with the highest priority using l
 
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
+0. Update current thread's wait_lock to this lock
 1. Level up the priority of the thread holding the lock
 2. Update the priority of this lock
 3. Handle nested donation by checking whether the donated thread is being blocked by others.
-4. Add this lock to lock holder's holidng lock lists and current thread's waiting lock lists if the lock doesn't exist in lock holder's holding list
+4. Add this lock to lock holder's holidng lock lists if the lock doesn't exist in lock holder's holding list
 5. sema_down and block myself
 
 
@@ -165,3 +165,6 @@ I don't think a lock is appropriate since interrupt is not a thread type. It can
 >> another design you considered?
 This design is safe and efficient. Also, it doesn't have a limit of nested level since every thread will automatically trace back every possible priority donation activities. 
 
+I thought about another design that each thread will trace the other threads it needs to wait for. But personally I think that's not appropriate. A thread can block many other threads, but can only be blocked by one thread at the same time.
+
+Remember intuitively a thread is waiting for a lock, not thread. It just waits for another thread to release a lock. It makes more sense to let a thread record a waiting lock other than a list of threads it needs to wait.

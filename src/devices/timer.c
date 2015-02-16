@@ -101,19 +101,23 @@ void
 timer_sleep (int64_t ticks) 
 {
   /* Create & initialize a Timer struct */
+  int64_t duration = timer_ticks();
   Timer *timer = (Timer*) malloc(sizeof(Timer));
   memset(timer, 0, sizeof(Timer));
   sema_init(&(timer->lock), 0);
-  timer->ticks = ticks + timer_ticks();
+  timer->ticks = ticks + duration;
+  intr_disable();
 
   /* Synchronize push_back sleep_queue using sleep_queue_lock */
   sema_down(&sleep_queue_lock);
   list_push_back(&sleep_queue, &(timer->elem));
   sema_up(&sleep_queue_lock);
 
+  sema_down(&(timer->lock));
+  intr_enable();
   /* enter the timer semaphore and waits for timer_interrupt to sema_up */
   ASSERT (intr_get_level () == INTR_ON);
-  sema_down(&(timer->lock));
+
 
 }
 
