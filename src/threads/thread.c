@@ -185,6 +185,8 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
+  t->parent_id = thread_current()->tid;
+
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
   kf->eip = NULL;
@@ -273,7 +275,7 @@ thread_current (void)
      of stack, so a few big automatic arrays or moderate
      recursion can cause stack overflow. */
   ASSERT (is_thread (t));
-  ASSERT (t->status == THREAD_RUNNING);
+  //ASSERT (t->status == THREAD_RUNNING);
 
   return t;
 }
@@ -295,13 +297,12 @@ thread_exit (void)
 #ifdef USERPROG
   process_exit ();
 #endif
-
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  list_remove (&thread_current()->allelem);
-  thread_current ()->status = THREAD_DYING;
+  //list_remove (&thread_current()->allelem);
+  thread_current()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
 }
@@ -498,6 +499,12 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&(t->hold_locks));
   t->wait_lock = NULL;
 
+  // project2
+  list_init(&(t->child_threads));
+  list_init(&(t->files));
+  t->parent_id = thread_current()->tid;
+  sema_init(&(t->sema), 0);
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -574,9 +581,10 @@ thread_schedule_tail (struct thread *prev)
      pull out the rug under itself.  (We don't free
      initial_thread because its memory was not obtained via
      palloc().) */
-  if (prev != NULL && prev->status == THREAD_DYING && prev != initial_thread) 
+  if (prev != NULL && prev->status == THREAD_DYING && prev != initial_thread && prev->parent_id == -1) 
     {
       ASSERT (prev != cur);
+      list_remove(&prev->allelem);
       palloc_free_page (prev);
     }
 }
@@ -631,4 +639,14 @@ less_than (struct list_elem* first, struct list_elem* second, void* aux) {
   struct thread* firstThread = list_entry(first, struct thread, elem);
   struct thread* secondThread = list_entry(second, struct thread, elem);
   return (firstThread->priority < secondThread->priority);
+}
+
+struct thread* get_thread_by_tid(tid_t tid) {
+  struct list_elem* temp;
+  for (temp = list_begin(&all_list); temp != list_end(&all_list); temp = list_next(temp)) {
+    struct thread * thread = list_entry(temp, struct thread, allelem);
+    if (thread->tid == tid)
+      return thread;
+  }
+  return NULL;
 }

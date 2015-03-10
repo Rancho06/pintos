@@ -20,28 +20,50 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-
+static char* get_cmd(const char* file_name);
+static void break_down_args(struct list* list, const char* file_name);
+static void release_args(struct list * list);
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
+
+struct arg {
+  int first;
+  int last;
+  char* location;
+  struct list_elem elem;
+};
+
+
 tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
   tid_t tid;
 
+  /* get the first command of file_name by detecting the first space */
+  char* command = get_cmd(file_name);
+  if (command == NULL) {
+    return TID_ERROR;
+  }
+  
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  if (fn_copy == NULL) {
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  }
+  strlcpy (fn_copy, file_name, strlen(file_name)+1);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  tid = thread_create (command, PRI_DEFAULT, start_process, fn_copy);
+  
+  free(command);
+  if (tid != TID_ERROR) {
+    struct thread* child_thread = get_thread_by_tid(tid);
+    list_push_back(&(thread_current()->child_threads), &(child_thread->child_elem));
+  }
   return tid;
 }
 
@@ -54,18 +76,53 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  char* command = get_cmd(file_name);
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (command, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
+  if (!success) {
+    thread_exit ();  
+  }
+  struct list arg_list;
+  list_init(&arg_list);
+  break_down_args(&arg_list, file_name);
+  struct list_elem* temp;
+  for (temp = list_rbegin(&arg_list); temp != list_rend(&arg_list); temp = list_prev(temp)) {
+    struct arg* arg = list_entry(temp, struct arg, elem);
+    --if_.esp;
+    *(char*)if_.esp = '\0';
+    int index;
+    for (index = arg->last; index >= arg->first; --index) {
+      --if_.esp;
+      *(char*)if_.esp = file_name[index];
+    }
+    arg->location = if_.esp;
+  }
+  while((int)if_.esp % 4 != 0) {
+    --if_.esp;
+  }
+  if_.esp -= 4;
+  *((int *)if_.esp) = 0;
 
+  for (temp = list_rbegin(&arg_list); temp != list_rend(&arg_list); temp = list_prev(temp)) {
+    struct arg* arg = list_entry(temp, struct arg, elem);
+    if_.esp -= 4;
+    *((int *)if_.esp) = arg->location;
+  }
+  int argv_loc = if_.esp;
+  if_.esp -= 4;
+  *((int *)if_.esp) = argv_loc;
+  if_.esp -= 4;
+  *((int *)if_.esp) = (int)list_size(&arg_list);
+  if_.esp -= 4;
+  *((int *)if_.esp) = 0;
+  release_args(&arg_list);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -88,6 +145,29 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  
+  struct list* list = &(thread_current()->child_threads);
+  struct list_elem* temp;
+  for (temp = list_begin(list); temp != list_end(list); temp = list_next(temp)) {
+    struct thread * thread = list_entry(temp, struct thread, child_elem);
+    if (thread->tid == child_tid) {
+      
+      sema_down(&(thread->sema));
+      //printf("%s\n", thread->name);
+      int code = -1;
+      while(thread->status != THREAD_DYING)
+        thread_yield();
+
+      if (thread->status == THREAD_DYING) {
+
+        code = thread->exit_code;
+        list_remove(&thread->child_elem);
+        list_remove(&thread->allelem);
+        palloc_free_page (thread);
+      }
+      return code;
+    }
+  }
   return -1;
 }
 
@@ -114,6 +194,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+    sema_up(&cur->sema);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -463,3 +544,58 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
+
+
+static char* get_cmd(const char* file_name) {
+  int i, size = 0;
+  bool space_found = false;
+  for (i = 0; i < strlen(file_name); i++) {
+    if (file_name[i] == " ") {
+        size = i;
+        space_found = true;
+        break;
+    }
+  }
+  if (!space_found) {
+    size = strlen(file_name);
+  }
+  char* command = malloc(size+1);
+  strlcpy(command, file_name, size+1);
+  command[size] = '\0';
+  return command;
+}
+
+static void break_down_args(struct list* list, const char* file_name) {
+  int i, head;
+  bool last_is_space = true;
+  for (i = 0; i < strlen(file_name); ++i) {
+    if (file_name[i] == " " && !last_is_space) {
+      struct arg* arg = malloc(sizeof(struct arg));
+      arg->first = head;
+      arg->last = i - 1;
+      list_push_back(list, &(arg->elem));
+      last_is_space = true;
+    }
+    else if (file_name[i] != " " && last_is_space) {
+      head = i;
+      last_is_space = false;
+    }
+  }
+  if (file_name[strlen(file_name)-1] != " ") {
+    struct arg* arg = malloc(sizeof(struct arg));
+    arg->first = head;
+    arg->last = strlen(file_name) - 1;
+    list_push_back(list, &(arg->elem));
+  }
+}
+
+
+static void release_args(struct list * list) {
+    struct list_elem * temp = list_begin(list);
+    while (temp != list_end(list)) {
+      struct arg* arg = list_entry(temp, struct arg, elem);
+      temp = list_next(temp);
+      free(arg);
+    }
+  }

@@ -97,6 +97,14 @@ struct thread
 
     struct list hold_locks;             /* List for all locks that this thread holds but some higher priority threads acquire */ 
     struct lock* wait_lock;             /* the lock current thread is waiting on */
+
+    struct list child_threads;
+    struct list_elem child_elem;
+    tid_t parent_id;
+    int exit_code;
+    struct semaphore sema;
+    struct list files;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -141,5 +149,8 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+
+struct thread* get_thread_by_tid(tid_t tid);
 
 #endif /* threads/thread.h */
