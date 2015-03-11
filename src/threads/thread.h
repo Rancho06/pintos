@@ -107,6 +107,8 @@ struct thread
     bool load_fail;
     struct file* executable;
 
+    struct semaphore loading;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */

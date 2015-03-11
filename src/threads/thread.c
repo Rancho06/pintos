@@ -204,13 +204,12 @@ thread_create (const char *name, int priority,
   
   /* Add to run queue. */
   thread_unblock (t);
-  //ASSERT(thread_current()->load_fail);
-  if (thread_current()->load_fail) {
+  /*if (thread_current()->load_fail) {
     thread_current()->load_fail = false;
     list_remove(&t->allelem);
     palloc_free_page(t);
     return -1;
-  }
+  }*/
   return tid;
 }
 
@@ -253,7 +252,8 @@ thread_unblock (struct thread *t)
   intr_set_level (old_level);
   /* If the newly unblocked thread has a higher priority, current thread yeilds */
   struct thread* current = thread_current();
-  if (!intr_context() && (current != idle_thread) /*&& (t->priority > current->priority)*/) {
+  if (!intr_context() && (current != idle_thread) && (t->priority > current->priority)) {
+    //printf("Hello %d %d\n", current->priority, t->priority);
     thread_yield();
   }
   
@@ -510,6 +510,7 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&(t->files));
   t->parent_id = thread_current()->tid;
   sema_init(&(t->sema), 0);
+  sema_init(&(t->loading), 0);
   t->load_fail = false;
   t->executable = NULL;
 

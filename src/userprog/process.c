@@ -63,8 +63,17 @@ process_execute (const char *file_name)
   //free(command);
   if (tid != TID_ERROR) {
     struct thread* child_thread = get_thread_by_tid(tid);
+    
+    sema_down(&child_thread->loading);
+    if (thread_current()->load_fail) {
+      thread_current()->load_fail = false;
+      list_remove(&child_thread->allelem);
+      palloc_free_page(child_thread);
+      return -1;
+    }
     list_push_back(&(thread_current()->child_threads), &(child_thread->child_elem));
   }
+
   return tid;
 }
 
@@ -89,12 +98,13 @@ start_process (void *file_name_)
   //free(command);
   /* If load failed, quit. */
   if (!success) {
-
+    //printf("Hello\n");
     tid_t parent_id = thread_current()->parent_id;
     struct thread* parent = get_thread_by_tid(parent_id);
     if (parent) {
       parent->load_fail = true;
     }
+    sema_up(&thread_current()->loading);
     thread_exit ();
   }
 
@@ -150,6 +160,7 @@ start_process (void *file_name_)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+  sema_up(&thread_current()->loading);
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
