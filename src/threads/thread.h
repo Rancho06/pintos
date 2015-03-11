@@ -98,16 +98,16 @@ struct thread
     struct list hold_locks;             /* List for all locks that this thread holds but some higher priority threads acquire */ 
     struct lock* wait_lock;             /* the lock current thread is waiting on */
 
-    struct list child_threads;
-    struct list_elem child_elem;
-    tid_t parent_id;
-    int exit_code;
-    struct semaphore sema;
-    struct list files;
-    bool load_fail;
-    struct file* executable;
-
-    struct semaphore loading;
+    /* data structures added for project2: user program */
+    struct list child_threads;          /* list of child threads */
+    struct list_elem child_elem;        /* used for adding to a child thread list */
+    tid_t parent_id;                    /* tid of parent thread */
+    int exit_code;                      /* exit code */
+    struct semaphore sema;              /* a semaphore used for process_wait() */
+    struct list files;                  /* list of open files */
+    bool load_fail;                     /* true if child thread fails loading properly */
+    struct file* executable;            /* a pointer to the executable file of current process */
+    struct semaphore loading;           /* a semaphore used to wait on child loading result */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -154,7 +154,7 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-
+/* project2: user programs */
 struct thread* get_thread_by_tid(tid_t tid);
 
 #endif /* threads/thread.h */

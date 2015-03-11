@@ -11,25 +11,20 @@
 static void syscall_handler (struct intr_frame *);
 static struct file* get_file(int fd);
 static void validate(char* buffer, struct intr_frame *f);
-static int count = 2;
+static int count = 2; // for file descriptor incrementing
 
 
 void
 syscall_init (void) 
 {
 	lock_init(&lock);
-
   	intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  //printf ("system call!\n");
-  //thread_exit ();
-
-	int handler = *(int*)(f->esp);
-
+	int handler = *(int*)(f->esp); // system call number
 	switch(handler) {
 		case SYS_HALT: {
 			shutdown_power_off();
@@ -233,7 +228,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 	}
 }
 
-
+/* Given a file decriptor fd, return the corresponding file struct */
 static struct file* get_file(int fd) {
   	struct list_elem *temp;
   	struct list* files = &(thread_current()->files);
@@ -246,7 +241,7 @@ static struct file* get_file(int fd) {
   	return NULL;
 }
 
-
+/* verify buffer is valid as a user memory address and terminate the process if invalid*/
 static void validate(char* buffer, struct intr_frame *f) {
 	if (!is_user_vaddr(buffer)) {
 		f->eax = -1;

@@ -204,12 +204,6 @@ thread_create (const char *name, int priority,
   
   /* Add to run queue. */
   thread_unblock (t);
-  /*if (thread_current()->load_fail) {
-    thread_current()->load_fail = false;
-    list_remove(&t->allelem);
-    palloc_free_page(t);
-    return -1;
-  }*/
   return tid;
 }
 
@@ -253,7 +247,6 @@ thread_unblock (struct thread *t)
   /* If the newly unblocked thread has a higher priority, current thread yeilds */
   struct thread* current = thread_current();
   if (!intr_context() && (current != idle_thread) && (t->priority > current->priority)) {
-    //printf("Hello %d %d\n", current->priority, t->priority);
     thread_yield();
   }
   
@@ -498,14 +491,15 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
+
+  /* project1: threads */
   t->priority = priority;
   t->old_priority = priority;
   t->magic = THREAD_MAGIC;
-
   list_init(&(t->hold_locks));
   t->wait_lock = NULL;
 
-  // project2
+  /* project2: user programs */
   list_init(&(t->child_threads));
   list_init(&(t->files));
   t->parent_id = thread_current()->tid;
