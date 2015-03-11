@@ -104,6 +104,8 @@ struct thread
     int exit_code;
     struct semaphore sema;
     struct list files;
+    bool load_fail;
+    struct file* executable;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

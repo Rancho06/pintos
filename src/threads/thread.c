@@ -186,7 +186,7 @@ thread_create (const char *name, int priority,
   tid = t->tid = allocate_tid ();
 
   t->parent_id = thread_current()->tid;
-
+  t->executable = NULL;
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
   kf->eip = NULL;
@@ -201,10 +201,16 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
-
+  
   /* Add to run queue. */
   thread_unblock (t);
 
+  if (thread_current()->load_fail) {
+    thread_current()->load_fail = false;
+    list_remove(&t->allelem);
+    palloc_free_page(t);
+    return -1;
+  }
   return tid;
 }
 
@@ -243,14 +249,14 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
-  intr_set_level (old_level);
+  
   
   /* If the newly unblocked thread has a higher priority, current thread yeilds */
   struct thread* current = thread_current();
-  if (!intr_context() && (current != idle_thread) && (t->priority > current->priority)) {
+  if (!intr_context() && (current != idle_thread) /*&& (t->priority > current->priority)*/) {
     thread_yield();
   }
-  
+  intr_set_level (old_level);
   
 }
 
@@ -504,6 +510,8 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&(t->files));
   t->parent_id = thread_current()->tid;
   sema_init(&(t->sema), 0);
+  t->load_fail = false;
+  t->executable = NULL;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
