@@ -188,7 +188,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 			validate(f->esp+4, f);
 			validate(f->esp+8, f);
 			struct file* file = get_file(fd);
-			if (fd == 1 || fd == 2 || !file) {
+			if (fd == 0 || fd == 1 || !file) {
 				f->eax = -1;
 			}
 			else {
@@ -203,7 +203,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 			int fd = *(int*)(f->esp + 4);
 			validate(f->esp+4, f);
 			struct file* file = get_file(fd);
-			if (fd == 1 || fd == 2 || !file) {
+			if (fd == 0 || fd == 1 || !file) {
 				f->eax = -1;
 			}
 			else {

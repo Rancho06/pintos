@@ -204,7 +204,7 @@ thread_create (const char *name, int priority,
   
   /* Add to run queue. */
   thread_unblock (t);
-
+  //ASSERT(thread_current()->load_fail);
   if (thread_current()->load_fail) {
     thread_current()->load_fail = false;
     list_remove(&t->allelem);
@@ -250,13 +250,13 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   
-  
+  intr_set_level (old_level);
   /* If the newly unblocked thread has a higher priority, current thread yeilds */
   struct thread* current = thread_current();
   if (!intr_context() && (current != idle_thread) /*&& (t->priority > current->priority)*/) {
     thread_yield();
   }
-  intr_set_level (old_level);
+  
   
 }
 
