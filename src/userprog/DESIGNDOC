@@ -1,0 +1,165 @@
+		     +--------------------------+
+       	       	     |		CS 140		|
+		     | PROJECT 2: USER PROGRAMS	|
+		     | 	   DESIGN DOCUMENT     	|
+		     +--------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Shu Zhou <shuzhou@usc.edu>
+
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+			   ARGUMENT PASSING
+			   ================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+struct arg {
+  int first;              /* start index in the whole string */
+  int last;               /* end index in the whole string*/
+  char* location;         /* start address in the stack */
+  struct list_elem elem;  /* used for adding to a argument list */
+};
+
+purpose: to store the information about each individual argument(string), to be used later when loading to the stack in start_process().
+
+
+
+---- ALGORITHMS ----
+
+>> A2: Briefly describe how you implemented argument parsing.  How do
+>> you arrange for the elements of argv[] to be in the right order?
+>> How do you avoid overflowing the stack page?
+
+I implemented a function named break_down_args(struct list* list, const char* file_name). It detects white spaces and seperate the entire commandline string into separate individual strings. Then it constructs each individual string into the arg sturct I declared. Then I add all these arg structs to a list and use this list to set up the stack.
+
+To ensure the right order, I will push from the end of the list, which means that the last added argument is pushed first. I will start from PHYS_BASE and decrement stack pointer every time before pushing.
+
+At last, I will check whether the total space used exceeds the PGSIZE. If it does, the new process should be terminated properly.
+
+
+
+---- RATIONALE ----
+
+>> A3: Why does Pintos implement strtok_r() but not strtok()?
+Sorry, I didn't implement using any of those, but I am guessing it's probably because of synchronizing issues?
+
+
+>> A4: In Pintos, the kernel separates commands into a executable name
+>> and arguments.  In Unix-like systems, the shell does this
+>> separation.  Identify at least two advantages of the Unix approach.
+
+1st advantage: Kernal doesn't need to separate commands itself, which improves the efficiency of the kernal. Unix can also help filter some unsafe commands I think.
+
+2nd advantage: Unix shell is more flexible for file paths since it can be used with system PATH variable. But it is more difficult for kernal to parse to get the same effect.
+
+
+			     SYSTEM CALLS
+			     ============
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+// syscall.c
+static int count = 2; // for file descriptor incrementing
+purpose: to increment every time to make sure file descriptor is unique.
+
+// syscall.h
+struct lock lock;
+purpose: used to prevent simultaneous access to file system.
+
+
+>> B2: Describe how file descriptors are associated with open files.
+>> Are file descriptors unique within the entire OS or just within a
+>> single process?
+
+When I call SYS_OPEN, I create a new file and assign a unique file descriptor with this file. Then I increment the file descriptor by 1 to make sure the file descriptor is different each time.
+
+In my design, file descriptors are unique within the entire OS.
+
+
+---- ALGORITHMS ----
+
+>> B3: Describe your code for reading and writing user data from the
+>> kernel.
+
+1. I first check whether the user access memory is valid.
+2. Then I check whether it is an invalid read/write case, which includes invlaid fd, negative size, and null buffer.
+3. Then I check the console read/write case.
+4. Then I check the general case to see whether this file descriptor exists and is valid.
+5. read/write if the file corresponding to the fd exits and use synchronization to protect the access.
+
+
+
+>> B4: Suppose a system call causes a full page (4,096 bytes) of data
+>> to be copied from user space into the kernel.  What is the least
+>> and the greatest possible number of inspections of the page table
+>> (e.g. calls to pagedir_get_page()) that might result?  What about
+>> for a system call that only copies 2 bytes of data?  Is there room
+>> for improvement in these numbers, and how much?
+
+
+
+
+>> B5: Briefly describe your implementation of the "wait" system call
+>> and how it interacts with process termination.
+
+
+
+
+>> B6: Any access to user program memory at a user-specified address
+>> can fail due to a bad pointer value.  Such accesses must cause the
+>> process to be terminated.  System calls are fraught with such
+>> accesses, e.g. a "write" system call requires reading the system
+>> call number from the user stack, then each of the call's three
+>> arguments, then an arbitrary amount of user memory, and any of
+>> these can fail at any point.  This poses a design and
+>> error-handling problem: how do you best avoid obscuring the primary
+>> function of code in a morass of error-handling?  Furthermore, when
+>> an error is detected, how do you ensure that all temporarily
+>> allocated resources (locks, buffers, etc.) are freed?  In a few
+>> paragraphs, describe the strategy or strategies you adopted for
+>> managing these issues.  Give an example.
+
+---- SYNCHRONIZATION ----
+
+>> B7: The "exec" system call returns -1 if loading the new executable
+>> fails, so it cannot return before the new executable has completed
+>> loading.  How does your code ensure this?  How is the load
+>> success/failure status passed back to the thread that calls "exec"?
+
+>> B8: Consider parent process P with child process C.  How do you
+>> ensure proper synchronization and avoid race conditions when P
+>> calls wait(C) before C exits?  After C exits?  How do you ensure
+>> that all resources are freed in each case?  How about when P
+>> terminates without waiting, before C exits?  After C exits?  Are
+>> there any special cases?
+
+---- RATIONALE ----
+
+>> B9: Why did you choose to implement access to user memory from the
+>> kernel in the way that you did?
+
+>> B10: What advantages or disadvantages can you see to your design
+>> for file descriptors?
+
+>> B11: The default tid_t to pid_t mapping is the identity mapping.
+>> If you changed it, what advantages are there to your approach?
+

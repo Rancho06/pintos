@@ -66,14 +66,16 @@ process_execute (const char *file_name)
   if (tid != TID_ERROR) {
     struct thread* current = thread_current();
     struct thread* child = get_thread_by_tid(tid); 
+    list_push_back(&(current->child_threads), &(child->child_elem));
     sema_down(&child->loading);
     if (current->load_fail) {
       current->load_fail = false;
       list_remove(&child->allelem);
+      list_remove(&child->child_elem);
       palloc_free_page(child);
       return -1;
     }
-    list_push_back(&(current->child_threads), &(child->child_elem));
+    
   }
 
   return tid;
@@ -248,7 +250,9 @@ process_exit (void)
   /* take care of the orphans */
   for (elem = list_begin(&cur->child_threads); elem != list_end(&cur->child_threads); elem = list_next(elem)) {
     struct thread * thread = list_entry(elem, struct thread, child_elem);
-    thread->parent_id = -1;
+    if (thread) {
+      thread->parent_id = -1;
+    }   
   }
 
   /* Destroy the current process's page directory and switch back
@@ -267,6 +271,7 @@ process_exit (void)
     pagedir_destroy (pd);
   }
   sema_up(&cur->sema);
+  
 }
 
 /* Sets up the CPU for running user code in the current
