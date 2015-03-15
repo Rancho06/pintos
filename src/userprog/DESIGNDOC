@@ -91,7 +91,6 @@ purpose: used to prevent simultaneous access to file system.
 >> single process?
 
 When I call SYS_OPEN, I create a new file and assign a unique file descriptor with this file. Then I increment the file descriptor by 1 to make sure the file descriptor is different each time.
-
 In my design, file descriptors are unique within the entire OS.
 
 
@@ -115,12 +114,21 @@ In my design, file descriptors are unique within the entire OS.
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
 
+No matter whether it's 4096 bytes or 2 bytes:
+Least possible number: 1; 
+Greatest possible number: 2;
+
+I didn't do any improvement about this issue in my design because I don't see any necessity in doing so. I will let page_fault to handle that.
 
 
 
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
 
+I first check whether the threads needing to be waited is a child of the current thread because only the parent can wait for the child.
+Then I calls sema_down and block the parent.
+When the child process terminates, in process_exit(), it will sema_up and unblock the parent process.
+Then I wait until the status of child is THREAD_DYING and release the child structure from the list.
 
 
 
@@ -138,12 +146,23 @@ In my design, file descriptors are unique within the entire OS.
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
 
+The pintos document provides us two possible options. I evaluated them and chose the first option.
+I implement a function called validate in syscall.c, which will validate pointer values. Basically it just checks whether the pointer value < PHYS_BASE by calling is_user_vaddr(). if bad pointer does happen, I will set exit code to -1 and calls thread_exit. Notice that for user programs, thread_exit will call process_exit(), which is where I deallocate all the dynamic allocated memories.
+
+
 ---- SYNCHRONIZATION ----
 
 >> B7: The "exec" system call returns -1 if loading the new executable
 >> fails, so it cannot return before the new executable has completed
 >> loading.  How does your code ensure this?  How is the load
 >> success/failure status passed back to the thread that calls "exec"?
+
+In process_exec(), we call the thread_create() and return a tid.
+if the returned tid is TID_ERROR, we return -1 as the exec() is failure.
+if the returned tid is valid tid, I block the parent by calling sema_down and let the child process load.
+When child process loads successfully, it will sema_up and unblock the parent. if it loads failure, it will first set the flag load_fail to true and then sema_up and unblock the parent.
+When parent process gets running in process_exec, it will check load_fail and return -1 if load_fail is true.
+
 
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
@@ -152,14 +171,44 @@ In my design, file descriptors are unique within the entire OS.
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
 
+P calls wait(C) before C exits:
+P will be blocked by semaphore and waits until C released semaphore and die.
+
+P calls wait(C) after C exits:
+Since C exits will remove C from P's child list, so wait(C) will do nothing.
+
+P terminates before C:
+set the parent_id of C to be -1, which means C is an orphan.
+
+P terminates after C:
+this case is normal, nothing special.
+
+
 ---- RATIONALE ----
 
 >> B9: Why did you choose to implement access to user memory from the
 >> kernel in the way that you did?
 
+I chose the first option suggested in pintos document because the second option is rather complicated and inefficient.
+In my design, I basically check whether that pointer is in valid user space, but does not do any deeper checkings. If a memory error comes, I will let page_fault() to handle that. This way is easy to implement and faster in speed.
+
+
+
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
 
+I think it is just trade-off.
+Advantage: 
+1. the file descriptors are globally unique so don't need to waste time on making sure whether the assigned number is not the same as any existing file descriptor.
+2. I include file descriptor in the file struct, so don't need to waste space to set up a mapping.
+
+Disadvantage: 
+1. file descriptor number keeps incrementing in the entire OS, which means that after a long time or a lot of user programs, the numbers may get to be very large, or even may have the possibility of overflowing.
+2. Because I don't have a mapping, when we use file descriptor to get a file, we need to iterate through the current open file lists, which is O(n) in time.
+
+
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
+
+In my design, I didn't do any thing related to tid_t to pid_t mapping. I didn't change it.
 
