@@ -21,5 +21,6 @@ void vm_release_frame(struct thread* thread);
 struct frame* get_frame_by_page();
 struct frame* get_frame_by_addr();
 void* vm_evict_frame(void* page_addr);
+void vm_set_accessed();
 
 #endif

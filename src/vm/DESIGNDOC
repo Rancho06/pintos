@@ -117,9 +117,7 @@ If we didn't find a match in the first pass, we iterate the frame table again an
 First we need to clean the pagedir of Q since that mapping does not exist any more. If it is dirty or swapped before, we need to write it to swap and set Q's data source to SWAP. When the eviction finishes, we set the frame's page_addr to P's address and its thread to P. Then we add this mapping in P's pagedir table and reflect in page P's frame_addr.
 
 
->> B4: Explain your heuristic for deciding whether a page fault for an
->> invalid virtual address should cause the stack to be extended into
->> the page that faulted.
+
 
 ---- SYNCHRONIZATION ----
 

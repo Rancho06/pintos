@@ -17,7 +17,6 @@ void frame_table_init() {
 void* vm_alloc_frame(void* page_addr) {
 	void* frame_addr = palloc_get_page(PAL_USER);
 	if (!frame_addr) {
-		//PANIC("USED UP FRAME");
 		frame_addr = vm_evict_frame(page_addr);
 		return NULL;
 	}
@@ -43,10 +42,11 @@ void vm_release_frame(struct thread* thread) {
 		struct frame* frame = list_entry(elem, struct frame, elem);
 		if (frame->thread == thread) {
 			frame->thread = NULL;
+			frame->page_addr = NULL;
 		}
-	}
-	lock_release(&table_lock);
+	}	
 	vm_release_page(&thread->page_list);
+	lock_release(&table_lock);
 }
 
 void* vm_evict_frame(void* page_addr) {
@@ -128,4 +128,16 @@ static struct frame* next_frame_to_evict() {
 	}
  	list_remove(&frame->elem);
  	return frame;
+}
+
+void vm_set_accessed() {
+	lock_acquire(&table_lock);
+	struct list_elem *temp;
+	for (temp = list_begin(&frame_table); temp != list_end(&frame_table); temp = list_next(temp)) {
+		struct frame* frame = list_entry(temp, struct frame, elem);
+		struct thread * thread = frame->thread;
+		if (thread != NULL)
+			pagedir_set_accessed(thread->pagedir, frame->page_addr, false);
+	}
+	lock_release(&table_lock);
 }
