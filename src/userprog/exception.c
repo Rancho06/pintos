@@ -4,12 +4,18 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-
+#include "threads/vaddr.h"
+#ifdef VM
+#include "vm/page.h"
+#include "vm/frame.h"
+#include "vm/swap.h"
+#endif
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+static bool load_data_from_file(struct page* page, void* frame_addr);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -148,6 +154,53 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+#ifdef VM
+  /*if (fault_addr >= PHYS_BASE || fault_addr == 0) {
+    kill(f);
+    return;
+  }*/
+  if (not_present) {
+    fault_addr = (uint32_t)fault_addr & ~PGMASK;
+    struct thread* current = thread_current();
+    struct page* page = vm_get_page(fault_addr, &current->page_list);
+    if (!page) {
+      kill(f);
+      return;
+    }
+    void* frame_addr = vm_alloc_frame(fault_addr);
+    if (!frame_addr) {
+      kill(f);
+      return;
+    }
+    if (!pagedir_set_page(current->pagedir, fault_addr, frame_addr, page->writable)) {
+      kill(f);
+      return;
+    }
+    switch (page->src) {
+      case FILE:
+        if (!load_data_from_file(page, frame_addr)) {
+          kill(f);
+          return;
+        }
+        break;
+      case SWAP:
+        load_data_from_swap(page->swap_num, frame_addr);
+        break;
+      case STACK:
+        break;
+      default:
+        break;
+    }
+    pagedir_set_dirty(current->pagedir, fault_addr, false);
+    struct frame* frame = get_frame_by_addr(fault_addr);
+    frame->loaded = true;
+  }
+  else {
+    kill(f);
+    return;
+  }
+
+#else
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
@@ -157,5 +210,16 @@ page_fault (struct intr_frame *f)
           write ? "writing" : "reading",
           user ? "user" : "kernel");
   kill (f);
+#endif
 }
 
+
+static bool load_data_from_file(struct page* page, void* frame_addr) {
+  lock_acquire(&file_lock);
+  if(file_read_at(page->executable, frame_addr, page->read_bytes, page->offset) != page->read_bytes) {
+    return false;
+  }
+  memset(frame_addr + page->read_bytes, 0, PGSIZE - page->read_bytes);
+  lock_release(&file_lock);
+  return true;
+}

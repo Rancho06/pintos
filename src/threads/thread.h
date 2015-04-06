@@ -115,6 +115,9 @@ struct thread
     struct file *executable;		/* The file we're running */
     void *files;			/* Open files. See filedesc.h */
 #endif
+#ifdef VM
+    struct list page_list;
+#endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

@@ -19,6 +19,9 @@
 #include <userprog/pagedir.h>
 #include <userprog/process.h>
 
+#include "vm/page.h"
+
+
 static void syscall_handler (struct intr_frame *);
 
 #define MAX_SYSCALL_PARAMS 5
@@ -163,12 +166,25 @@ syscall_init (void)
   lock_init (&fs_lock);
 }
 
+static bool check_addr(struct thread* thread, void* page_addr, bool need_write) {
+  if (pagedir_get_page(thread->pagedir, page_addr) != NULL) {
+    return true;
+  }
+  page_addr = (uint32_t)page_addr & ~PGMASK;
+  struct page* page = vm_get_page(page_addr, &thread->page_list);
+  if (!page) return false;
+  if (need_write) return page->writable;
+  return true;
+}
+
+
 /* Return true if vaddr is a valid user address in cur's page directory */
 static bool
-valid_addr (struct thread *cur, void *vaddr)
+valid_addr (struct thread *cur, void *vaddr, bool need_write)
 {
-  return ( is_user_vaddr (vaddr) &&
-      pagedir_get_page (cur->pagedir, vaddr) != NULL);
+  /*return ( is_user_vaddr (vaddr) &&
+      pagedir_get_page (cur->pagedir, vaddr) != NULL);*/
+  return is_user_vaddr(vaddr) && check_addr(cur, vaddr, need_write);
 }
 
 /* Return true if vaddr points to a valid user buffer of at most lim characters
@@ -178,13 +194,13 @@ valid_addr (struct thread *cur, void *vaddr)
  * no NUL ('\0') false is returned.
  */
 static bool
-valid_buffer (struct thread *cur, char *vaddr, int lim, bool zeroed)
+valid_buffer (struct thread *cur, char *vaddr, int lim, bool zeroed, bool need_write)
 {
   int i = 0;
   bool found_zero = false;
 
   for (i = 0; i < lim; i++) {
-    if ( !valid_addr (cur, vaddr+i))
+    if ( !valid_addr (cur, vaddr+i, need_write))
       return false;
     if ( zeroed && vaddr[i] == '\0' ) {
       found_zero = true;
@@ -206,7 +222,7 @@ get_args (struct syscall_signature *sig, void *esp, struct thread *cur)
   int i =0;
 
   for (i = 0; i < nvar; i++) {
-    if (!valid_addr (cur, esp) ) return false;
+    if (!valid_addr (cur, esp, false) ) return false;
     switch (sig->param[i].type) {
       case SYSCALL_PTR:
 	{
@@ -290,7 +306,7 @@ exec_syscall (struct syscall_signature *sig, struct thread *cur)
 {
   char *buf = (char *) sig->param[0].value.pval;
 
-  if ( !valid_buffer (cur, buf, PGSIZE, true) )
+  if ( !valid_buffer (cur, buf, PGSIZE, true, false) )
     thread_exit ();
   return process_execute (buf);
 }
@@ -311,7 +327,7 @@ create_syscall (struct syscall_signature *sig, struct thread *cur)
   int rv = 0;
 
   /* Terminate the process on a bad pointer */
-  if ( !valid_buffer (cur, name, PGSIZE, true) )
+  if ( !valid_buffer (cur, name, PGSIZE, true, false) )
     thread_exit ();
 
   lock_acquire (&fs_lock);
@@ -328,7 +344,7 @@ remove_syscall (struct syscall_signature *sig, struct thread *cur)
   char *name = (char *) sig->param[0].value.pval;
   int rv = 0;
 
-  if ( !valid_buffer (cur, name, PGSIZE, true) )
+  if ( !valid_buffer (cur, name, PGSIZE, true, false) )
     thread_exit ();
 
   lock_acquire (&fs_lock);
@@ -347,7 +363,7 @@ open_syscall (struct syscall_signature *sig, struct thread *cur)
   struct file *opened = NULL;
   int fd = 0;
 
-  if ( !valid_buffer (cur, name, PGSIZE, true) )
+  if ( !valid_buffer (cur, name, PGSIZE, true, false) )
     thread_exit ();
 
   if ( (fd = get_new_file (cur)) == -1)
@@ -392,7 +408,7 @@ read_syscall (struct syscall_signature *sig, struct thread *cur)
   struct file *f = NULL;
   int rv = -1;
 
-  if ( !valid_buffer (cur, buf, lim, false) )
+  if ( !valid_buffer (cur, buf, lim, false, true) )
     thread_exit ();
 
   if ( fd == STDIN_FILENO ) {
@@ -422,7 +438,7 @@ write_syscall (struct syscall_signature *sig, struct thread *cur)
   struct file *f = NULL;
   int rv = -1;
 
-  if ( !valid_buffer (cur, buf, lim, false) )
+  if ( !valid_buffer (cur, buf, lim, false, false) )
     thread_exit ();
 
   if ( fd == STDOUT_FILENO ) {
@@ -508,7 +524,7 @@ syscall_handler (struct intr_frame *f)
 
   ASSERT (cur && cur->pagedir);
 
-  if (!valid_addr (cur, esp))
+  if (!valid_addr (cur, esp, false))
     thread_exit ();
 
   int *iesp = (int *) esp;
