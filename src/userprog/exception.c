@@ -12,7 +12,7 @@
 #endif
 /* Number of page faults processed. */
 static long long page_fault_cnt;
-
+//extern struct lock fs_lock;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 static bool load_data_from_file(struct page* page, void* frame_addr);
@@ -154,6 +154,13 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  uint32_t esp_page = (uint32_t)f->esp & ~PGMASK;
+  //printf("esp: %p, fault_addr: %p\n", f->esp, fault_addr);
+  if ((uint32_t)fault_addr >= (uint32_t)f->esp - 4||  esp_page + 4 >= f->esp) {
+    //printf("esp: %p, fault_addr: %p\n", f->esp, fault_addr);
+    vm_set_stack((void*)((uint32_t)fault_addr & ~PGMASK));
+  }
+
 #ifdef VM
   /*if (fault_addr >= PHYS_BASE || fault_addr == 0) {
     kill(f);
@@ -192,8 +199,10 @@ page_fault (struct intr_frame *f)
         break;
     }
     pagedir_set_dirty(current->pagedir, fault_addr, false);
-    struct frame* frame = get_frame_by_addr(fault_addr);
-    frame->loaded = true;
+    if (!page->locked) {
+      struct frame* frame = get_frame_by_addr(frame_addr);
+      frame->loaded = true;
+    }
   }
   else {
     kill(f);

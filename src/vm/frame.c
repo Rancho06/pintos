@@ -7,6 +7,7 @@
 
 static struct lock table_lock;
 static struct frame* next_frame_to_evict();
+static void* vm_evict_frame(void* page_addr);
 
 void frame_table_init() {
 	list_init(&frame_table);
@@ -52,13 +53,16 @@ void vm_release_frame(struct thread* thread) {
 void* vm_evict_frame(void* page_addr) {
 	lock_acquire(&table_lock);
 	struct frame* frame = next_frame_to_evict();
-	struct page* page = vm_get_page(frame->page_addr, &frame->thread->page_list);
-	bool dirty = pagedir_is_dirty(frame->thread->pagedir, page->page_addr);
-	pagedir_clear_page(frame->thread->pagedir, page->page_addr);
-	if (page->src == SWAP || dirty) {
-		page->src = SWAP;
-		page->swap_num = write_data_to_swap(frame->frame_addr);
+	if (frame->thread != NULL) {
+		bool dirty = pagedir_is_dirty(frame->thread->pagedir, frame->page_addr);
+		pagedir_clear_page(frame->thread->pagedir, frame->page_addr);
+		struct page* page = vm_get_page(frame->page_addr, &frame->thread->page_list);
+		if (page->src == SWAP || dirty) {
+			page->src = SWAP;
+			page->swap_num = write_data_to_swap(frame->frame_addr);
+		}
 	}
+	
 	frame->page_addr = page_addr;
 	frame->thread = thread_current();
 	frame->loaded = false;
@@ -71,7 +75,7 @@ void* vm_evict_frame(void* page_addr) {
 struct frame* get_frame_by_page(void *page_addr) {
 	lock_acquire(&table_lock);
 	struct list_elem * temp;
-	struct frame* frame;
+	struct frame* frame = NULL;
 	for (temp = list_begin(&frame_table); temp != list_end(&frame_table); temp = list_next(temp)) {
 		struct frame* f = list_entry(temp, struct frame, elem);
 		if (f->page_addr == page_addr) {
@@ -86,7 +90,7 @@ struct frame* get_frame_by_page(void *page_addr) {
 struct frame* get_frame_by_addr(void *frame_addr) {
 	lock_acquire(&table_lock);
 	struct list_elem* temp;
-	struct frame* frame;
+	struct frame* frame = NULL;
 	for (temp = list_begin(&frame_table); temp != list_end(&frame_table); temp = list_next(temp)) {
 		struct frame* f = list_entry(temp, struct frame, elem);
 		if (f->frame_addr == frame_addr) {
@@ -101,6 +105,7 @@ struct frame* get_frame_by_addr(void *frame_addr) {
 
 static struct frame* next_frame_to_evict() {
 	struct frame* frame;
+	frame = NULL;
 	struct list_elem* elem;
 	for (elem = list_begin(&frame_table); elem != list_end(&frame_table); elem = list_next(elem)) {
 		struct frame* temp = list_entry(elem, struct frame, elem);
@@ -108,19 +113,18 @@ static struct frame* next_frame_to_evict() {
 			frame = temp;
 			break;
 		}
-		if (!temp->loaded && pagedir_is_accessed(thread_current()->pagedir, temp->page_addr)) {
-			frame = temp;
-			break;
+		else {
+			if (temp->loaded && !pagedir_is_accessed(temp->thread->pagedir, temp->page_addr)) {
+				frame = temp;
+				break;
+			}	
 		}
+		
 	}
 	if (!frame) {
 		for (elem = list_begin(&frame_table); elem != list_end(&frame_table); elem = list_next(elem)) {
 			struct frame* temp = list_entry(elem, struct frame, elem);
-			if (!temp->thread) {
-				frame = temp;
-				break;
-			}
-			if (!temp->loaded) {
+			if (!temp->thread || temp->loaded) {
 				frame = temp;
 				break;
 			}
@@ -131,7 +135,12 @@ static struct frame* next_frame_to_evict() {
 }
 
 void vm_set_accessed() {
-	lock_acquire(&table_lock);
+	if (!lock_try_acquire(&table_lock))
+		return;
+	if (list_size(&frame_table) == 0) {
+		lock_release(&table_lock);
+		return;
+	}
 	struct list_elem *temp;
 	for (temp = list_begin(&frame_table); temp != list_end(&frame_table); temp = list_next(temp)) {
 		struct frame* frame = list_entry(temp, struct frame, elem);

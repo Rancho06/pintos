@@ -20,7 +20,7 @@
 #include <userprog/process.h>
 
 #include "vm/page.h"
-
+#include "vm/frame.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -31,7 +31,7 @@ static void syscall_handler (struct intr_frame *);
 
 /* Filesystem GKL (Giant Kernel Lock) */
 struct lock fs_lock;
-
+static void* origin;
 /* The value of a parameter to a system call, either an integer or a pointer */
 union syscall_param_value {
   int ival;
@@ -173,6 +173,7 @@ static bool check_addr(struct thread* thread, void* page_addr, bool need_write) 
   page_addr = (uint32_t)page_addr & ~PGMASK;
   struct page* page = vm_get_page(page_addr, &thread->page_list);
   if (!page) return false;
+  page->locked = true;
   if (need_write) return page->writable;
   return true;
 }
@@ -408,6 +409,14 @@ read_syscall (struct syscall_signature *sig, struct thread *cur)
   struct file *f = NULL;
   int rv = -1;
 
+  if ((uint32_t)buf > (uint32_t)origin) {
+    void * page_addr = (uint32_t)origin & ~PGMASK;
+    while ((uint32_t)page_addr < (uint32_t)buf + lim) {
+      vm_set_stack(page_addr);
+      page_addr += PGSIZE;
+    }
+  }
+
   if ( !valid_buffer (cur, buf, lim, false, true) )
     thread_exit ();
 
@@ -425,6 +434,16 @@ read_syscall (struct syscall_signature *sig, struct thread *cur)
   rv = file_read (f, buf, lim);
   lock_release (&fs_lock);
 
+  uint32_t start = (uint32_t)(buf) & ~PGMASK;
+  uint32_t end = (uint32_t)(buf + lim) & ~PGMASK;
+  uint32_t i;
+  for (i = start; i <= end; i += PGSIZE) {
+    void * page_addr = (void *)(i);
+    struct page* page = vm_get_page(page_addr, &cur->page_list);
+    page->locked = false;
+    struct frame* frame = get_frame_by_page(page_addr);
+    frame->loaded = true;
+  }
   return rv;
 }
 
@@ -437,6 +456,14 @@ write_syscall (struct syscall_signature *sig, struct thread *cur)
   unsigned int lim = (unsigned int) sig->param[2].value.ival;
   struct file *f = NULL;
   int rv = -1;
+
+  if ((uint32_t)buf > (uint32_t)origin) {
+    void * page_addr = (uint32_t)origin & ~PGMASK;
+    while ((uint32_t)page_addr < (uint32_t)buf + lim) {
+      vm_set_stack(page_addr);
+      page_addr += PGSIZE;
+    }
+  }
 
   if ( !valid_buffer (cur, buf, lim, false, false) )
     thread_exit ();
@@ -521,7 +548,7 @@ syscall_handler (struct intr_frame *f)
   struct thread *cur = thread_current ();
   struct syscall_signature sig;
   int rv = 0;
-
+  origin = f->esp;
   ASSERT (cur && cur->pagedir);
 
   if (!valid_addr (cur, esp, false))

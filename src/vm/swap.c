@@ -16,9 +16,9 @@ void swap_init() {
 	if (!block) {
 		PANIC("Block not found");
 	}
-	pages_in_block = block_size(block) / PGSIZE;
+	pages_in_block = block_size(block) / sectors_in_page;
 	usage = malloc(sizeof(bool) * pages_in_block);
-	memset(usage, false, sizeof(bool) * pages_in_block);
+	memset(usage, 0, sizeof(bool) * pages_in_block);
 }
 
 void load_data_from_swap(int page_num, void* frame_addr) {
