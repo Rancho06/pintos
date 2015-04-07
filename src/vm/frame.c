@@ -19,7 +19,6 @@ void* vm_alloc_frame(void* page_addr) {
 	void* frame_addr = palloc_get_page(PAL_USER);
 	if (!frame_addr) {
 		frame_addr = vm_evict_frame(page_addr);
-		return NULL;
 	}
 	else {
 		struct frame* frame;
@@ -46,6 +45,7 @@ void vm_release_frame(struct thread* thread) {
 			frame->page_addr = NULL;
 		}
 	}	
+	
 	vm_release_page(&thread->page_list);
 	lock_release(&table_lock);
 }
@@ -73,9 +73,10 @@ void* vm_evict_frame(void* page_addr) {
 
 
 struct frame* get_frame_by_page(void *page_addr) {
-	lock_acquire(&table_lock);
+	
 	struct list_elem * temp;
 	struct frame* frame = NULL;
+	lock_acquire(&table_lock);
 	for (temp = list_begin(&frame_table); temp != list_end(&frame_table); temp = list_next(temp)) {
 		struct frame* f = list_entry(temp, struct frame, elem);
 		if (f->page_addr == page_addr) {
@@ -88,9 +89,10 @@ struct frame* get_frame_by_page(void *page_addr) {
 }
 
 struct frame* get_frame_by_addr(void *frame_addr) {
-	lock_acquire(&table_lock);
+	
 	struct list_elem* temp;
 	struct frame* frame = NULL;
+	lock_acquire(&table_lock);
 	for (temp = list_begin(&frame_table); temp != list_end(&frame_table); temp = list_next(temp)) {
 		struct frame* f = list_entry(temp, struct frame, elem);
 		if (f->frame_addr == frame_addr) {

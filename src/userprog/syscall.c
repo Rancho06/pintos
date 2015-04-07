@@ -32,6 +32,9 @@ static void syscall_handler (struct intr_frame *);
 /* Filesystem GKL (Giant Kernel Lock) */
 struct lock fs_lock;
 static void* origin;
+
+
+
 /* The value of a parameter to a system call, either an integer or a pointer */
 union syscall_param_value {
   int ival;

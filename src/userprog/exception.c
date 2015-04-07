@@ -162,30 +162,31 @@ page_fault (struct intr_frame *f)
   }
 
 #ifdef VM
-  /*if (fault_addr >= PHYS_BASE || fault_addr == 0) {
-    kill(f);
-    return;
-  }*/
+
   if (not_present) {
     fault_addr = (uint32_t)fault_addr & ~PGMASK;
     struct thread* current = thread_current();
     struct page* page = vm_get_page(fault_addr, &current->page_list);
     if (!page) {
+      //printf("A\n");
       kill(f);
       return;
     }
     void* frame_addr = vm_alloc_frame(fault_addr);
     if (!frame_addr) {
+      //printf("B\n");
       kill(f);
       return;
     }
     if (!pagedir_set_page(current->pagedir, fault_addr, frame_addr, page->writable)) {
+      //printf("C\n");
       kill(f);
       return;
     }
     switch (page->src) {
       case FILE:
         if (!load_data_from_file(page, frame_addr)) {
+          //printf("D\n");
           kill(f);
           return;
         }
@@ -205,6 +206,7 @@ page_fault (struct intr_frame *f)
     }
   }
   else {
+    //printf("E\n");
     kill(f);
     return;
   }
@@ -224,11 +226,14 @@ page_fault (struct intr_frame *f)
 
 
 static bool load_data_from_file(struct page* page, void* frame_addr) {
+
   lock_acquire(&file_lock);
   if(file_read_at(page->executable, frame_addr, page->read_bytes, page->offset) != page->read_bytes) {
+    lock_release(&file_lock);
     return false;
   }
-  memset(frame_addr + page->read_bytes, 0, PGSIZE - page->read_bytes);
   lock_release(&file_lock);
+  memset(frame_addr + page->read_bytes, 0, PGSIZE - page->read_bytes);
+  
   return true;
 }

@@ -176,9 +176,9 @@ process_exit (void)
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
-  pd = cur->pagedir;
-  if (pd != NULL) 
-    {
+  //pd = cur->pagedir;
+  //if (pd != NULL) 
+    //{
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
@@ -186,10 +186,10 @@ process_exit (void)
          directory before destroying the process's page
          directory, or our active page directory will be one
          that's been freed (and cleared). */
-      cur->pagedir = NULL;
-      pagedir_activate (NULL);
-      pagedir_destroy (pd);
-    }
+      //cur->pagedir = NULL;
+      //pagedir_activate (NULL);
+      //pagedir_destroy (pd);
+    //}
   /* All done, let our parent know this thread is terminating */
   sema_up (&cur->parent_sem);
 }
