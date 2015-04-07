@@ -207,7 +207,8 @@ page_fault (struct intr_frame *f)
   }
   else {
     //printf("E\n");
-    kill(f);
+    //kill(f);
+    thread_exit();
     return;
   }
 
