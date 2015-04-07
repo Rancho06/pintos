@@ -172,7 +172,7 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
-  vm_set_accessed();
+  //vm_set_accessed();
   thread_tick ();
 }
 

@@ -117,7 +117,6 @@ main (void)
 
 #ifdef VM
   frame_table_init();
-  swap_init();
 #endif
 
   /* Start thread scheduler and enable interrupts. */
@@ -132,8 +131,10 @@ main (void)
   filesys_init (format_filesys);
 #endif
 
+
+
   printf ("Boot complete.\n");
-  
+  swap_init();
   /* Run actions specified on kernel command line. */
   run_actions (argv);
 
