@@ -27,7 +27,8 @@ static void syscall_handler (struct intr_frame *);
 #define MAX_SYSCALL_PARAMS 5
 /* This will change for later projects */
 #define MIN_SYSCALL SYS_HALT
-#define MAX_SYSCALL SYS_CLOSE
+//#define MAX_SYSCALL SYS_CLOSE
+#define MAX_SYSCALL SYS_MUNMAP
 
 /* Filesystem GKL (Giant Kernel Lock) */
 struct lock fs_lock;
@@ -82,6 +83,9 @@ struct syscall_signature sigs[MAX_SYSCALL+1] = {
 	 { SYSCALL_INT, { 0 } } }, false},		/* SYS_SEEK */
   { 1, { { SYSCALL_PTR, { 0 } } }, true},		/* SYS_TELL */
   { 1, { { SYSCALL_PTR, { 0 } } }, false},		/* SYS_CLOSE */
+  { 2, { { SYSCALL_INT, { 0 } },
+   { SYSCALL_PTR, { 0 } } }, true},      /* SYS_MMAP */
+  { 1, { { SYSCALL_INT, { 0 } } }, false},    /* SYS_MUNMAP */
 };
 
 /* forward declarations of syscall implementations */
@@ -142,6 +146,14 @@ tell_syscall (struct syscall_signature *sig, struct thread *cur);
 static int
 close_syscall (struct syscall_signature *sig, struct thread *cur);
 
+/* Mmap */
+static int
+mmap_syscall (struct syscall_signature *sig, struct thread *cur);
+
+/* Munmap */
+static int
+munmap_syscall (struct syscall_signature *sig, struct thread *cur);
+
 /* Jump table of system calls, keyed by system call number */
 typedef int (*syscall_impl)(struct syscall_signature *, struct thread *);
 syscall_impl syscall_implementation[MAX_SYSCALL+1] = {
@@ -158,6 +170,8 @@ syscall_impl syscall_implementation[MAX_SYSCALL+1] = {
   seek_syscall,						/* SYS_SEEK */
   tell_syscall,						/* SYS_TELL */
   close_syscall,					/* SYS_CLOSE */
+  mmap_syscall,           /* SYS_MMAP */
+  munmap_syscall,         /* SYS_MUNMAP */
 };
 
 
@@ -169,15 +183,21 @@ syscall_init (void)
   lock_init (&fs_lock);
 }
 
+
+/* Check whether the given page_addr is valid regarding to the need_write request */
 static bool check_addr(struct thread* thread, void* page_addr, bool need_write) {
   if (pagedir_get_page(thread->pagedir, page_addr) != NULL) {
     return true;
   }
-  page_addr = (uint32_t)page_addr & ~PGMASK;
+  page_addr = (int)page_addr & ~PGMASK;
   struct page* page = vm_get_page(page_addr, &thread->page_list);
-  if (!page) return false;
+  if (!page) {
+    return false;
+  }
   page->locked = true;
-  if (need_write) return page->writable;
+  if (need_write) {
+    return page->writable;
+  }
   return true;
 }
 
@@ -186,8 +206,6 @@ static bool check_addr(struct thread* thread, void* page_addr, bool need_write) 
 static bool
 valid_addr (struct thread *cur, void *vaddr, bool need_write)
 {
-  /*return ( is_user_vaddr (vaddr) &&
-      pagedir_get_page (cur->pagedir, vaddr) != NULL);*/
   return is_user_vaddr(vaddr) && check_addr(cur, vaddr, need_write);
 }
 
@@ -412,9 +430,9 @@ read_syscall (struct syscall_signature *sig, struct thread *cur)
   struct file *f = NULL;
   int rv = -1;
 
-  if ((uint32_t)buf > (uint32_t)origin) {
-    void * page_addr = (uint32_t)origin & ~PGMASK;
-    while ((uint32_t)page_addr < (uint32_t)buf + lim) {
+  if (buf > origin) {
+    void * page_addr = (int)origin & ~PGMASK;
+    while (page_addr < buf + lim) {
       vm_set_stack(page_addr);
       page_addr += PGSIZE;
     }
@@ -437,14 +455,13 @@ read_syscall (struct syscall_signature *sig, struct thread *cur)
   rv = file_read (f, buf, lim);
   lock_release (&fs_lock);
 
-  uint32_t start = (uint32_t)(buf) & ~PGMASK;
-  uint32_t end = (uint32_t)(buf + lim) & ~PGMASK;
-  uint32_t i;
-  for (i = start; i <= end; i += PGSIZE) {
-    void * page_addr = (void *)(i);
-    struct page* page = vm_get_page(page_addr, &cur->page_list);
+  int first_page = (int)(buf) & ~PGMASK;
+  int last_page = (int)(buf + lim) & ~PGMASK;
+  int i;
+  for (i = first_page; i <= last_page; i += PGSIZE) {
+    struct page* page = vm_get_page(i, &cur->page_list);
     page->locked = false;
-    struct frame* frame = get_frame_by_page(page_addr);
+    struct frame* frame = get_frame_by_page(i);
     frame->loaded = true;
   }
   return rv;
@@ -460,9 +477,9 @@ write_syscall (struct syscall_signature *sig, struct thread *cur)
   struct file *f = NULL;
   int rv = -1;
 
-  if ((uint32_t)buf > (uint32_t)origin) {
+  if (buf > origin) {
     void * page_addr = (uint32_t)origin & ~PGMASK;
-    while ((uint32_t)page_addr < (uint32_t)buf + lim) {
+    while (page_addr < buf + lim) {
       vm_set_stack(page_addr);
       page_addr += PGSIZE;
     }
@@ -541,6 +558,26 @@ close_syscall (struct syscall_signature *sig, struct thread *cur)
 
   return 0;
 }
+
+
+/* Mmap */
+static int
+mmap_syscall (struct syscall_signature *sig, struct thread *cur) {
+  return 0;
+}
+
+/* Munmap */
+static int
+munmap_syscall (struct syscall_signature *sig, struct thread *cur) {
+  return 0;
+}
+
+
+
+
+
+
+
 
 /* Look up the system call, parse the arguments from the user stack, and call
  * the implementation. */

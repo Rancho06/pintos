@@ -23,7 +23,8 @@ struct page {
 };
 
 struct page* vm_get_page(void* page_addr, struct list* page_list);
-bool vm_create_page(struct file* file, off_t ofs, void *upage, uint32_t read_bytes, bool writable);
+bool vm_create_page(struct file* file, off_t ofs, void* upage, uint32_t read_bytes, bool writable);
 bool vm_set_stack(void* page_addr);
 void vm_release_page(struct list* page_list);
+
 #endif

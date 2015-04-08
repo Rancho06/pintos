@@ -502,48 +502,17 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (ofs % PGSIZE == 0);
 
   while (read_bytes > 0 || zero_bytes > 0) {
-    /* Calculate how to fill this page.
-       We will read PAGE_READ_BYTES bytes from FILE
-       and zero the final PAGE_ZERO_BYTES bytes. */
     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
     if (!vm_create_page(file, ofs, upage, page_read_bytes, writable)) {
       return false;
     }
     read_bytes -= page_read_bytes;
     zero_bytes -= page_zero_bytes;
-    ofs += page_read_bytes;
     upage += PGSIZE;
+
+    ofs += page_read_bytes;
   }
-    /*file_seek (file, ofs);
-    while (read_bytes > 0 || zero_bytes > 0) 
-      {
-
-        size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-        size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
-        
-        uint8_t *kpage = palloc_get_page (PAL_USER);
-        if (kpage == NULL)
-          return false;
-
-        if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-          {
-            palloc_free_page (kpage);
-            return false; 
-          }
-        memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-        if (!install_page (upage, kpage, writable)) 
-          {
-            palloc_free_page (kpage);
-            return false; 
-          }
-        read_bytes -= page_read_bytes;
-        zero_bytes -= page_zero_bytes;
-        upage += PGSIZE;
-      }*/
   return true;
 }
 
@@ -571,21 +540,11 @@ setup_stack (void **esp, char *args, int nargs, int argsz)
   /* If this stack won't fit in a page, fail */
   if ( argspace + pointerspace > PGSIZE)
     return false;
-  if (!vm_set_stack((uint8_t *) PHYS_BASE - PGSIZE)) {
+  if (!vm_set_stack(PHYS_BASE - PGSIZE)) {
     return false;
   }
   *esp = PHYS_BASE;
-/*
-  if ( !(kpage = palloc_get_page (PAL_USER | PAL_ZERO)) )
-    return false;
-  success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-  if (success)
-    *esp = PHYS_BASE;
-  else {
-    palloc_free_page (kpage);
-    return success;
-  }
-  */
+  
   /* Lay out the stack */
   int *stackbottom = (int *) (PHYS_BASE - (argspace + pointerspace));
   int i = 0;

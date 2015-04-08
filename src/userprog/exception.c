@@ -154,39 +154,31 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  uint32_t esp_page = (uint32_t)f->esp & ~PGMASK;
-  //printf("esp: %p, fault_addr: %p\n", f->esp, fault_addr);
-  if ((uint32_t)fault_addr >= (uint32_t)f->esp - 4||  esp_page + 4 >= f->esp) {
-    //printf("esp: %p, fault_addr: %p\n", f->esp, fault_addr);
-    vm_set_stack((void*)((uint32_t)fault_addr & ~PGMASK));
+  int stack_page_addr = (int)f->esp & ~PGMASK;
+  if (fault_addr >= f->esp - 4 || stack_page_addr + 4 >= f->esp) {
+    vm_set_stack((int)fault_addr & ~PGMASK);
   }
 
-#ifdef VM
-
   if (not_present) {
-    fault_addr = (uint32_t)fault_addr & ~PGMASK;
+    fault_addr = (int)fault_addr & ~PGMASK;
     struct thread* current = thread_current();
     struct page* page = vm_get_page(fault_addr, &current->page_list);
     if (!page) {
-      //printf("A\n");
       kill(f);
       return;
     }
     void* frame_addr = vm_alloc_frame(fault_addr);
     if (!frame_addr) {
-      //printf("B\n");
       kill(f);
       return;
     }
     if (!pagedir_set_page(current->pagedir, fault_addr, frame_addr, page->writable)) {
-      //printf("C\n");
       kill(f);
       return;
     }
     switch (page->src) {
       case FILE:
         if (!load_data_from_file(page, frame_addr)) {
-          //printf("D\n");
           kill(f);
           return;
         }
@@ -206,35 +198,19 @@ page_fault (struct intr_frame *f)
     }
   }
   else {
-    //printf("E\n");
-    //kill(f);
     thread_exit();
     return;
   }
-
-#else
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-  kill (f);
-#endif
 }
 
 
 static bool load_data_from_file(struct page* page, void* frame_addr) {
-
   lock_acquire(&file_lock);
   if(file_read_at(page->executable, frame_addr, page->read_bytes, page->offset) != page->read_bytes) {
     lock_release(&file_lock);
     return false;
   }
   lock_release(&file_lock);
-  memset(frame_addr + page->read_bytes, 0, PGSIZE - page->read_bytes);
-  
+  memset(frame_addr + page->read_bytes, 0, PGSIZE - page->read_bytes); 
   return true;
 }
