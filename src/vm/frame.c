@@ -11,6 +11,7 @@ static void* vm_evict_frame(void* page_addr);
 
 void frame_table_init() {
 	list_init(&frame_table);
+	list_init(&maps);
 	lock_init(&table_lock);
 	lock_init(&file_lock);
 }
@@ -54,9 +55,16 @@ void* vm_evict_frame(void* page_addr) {
 	if (frame->thread != NULL) {
 		pagedir_clear_page(frame->thread->pagedir, frame->page_addr);
 		struct page* page = vm_get_page(frame->page_addr, &frame->thread->page_list);
-		if (page->src == SWAP || pagedir_is_dirty(frame->thread->pagedir, frame->page_addr)) {
+		if (page->src == SWAP || (page->src != MAP && pagedir_is_dirty(frame->thread->pagedir, frame->page_addr))) {
 			page->src = SWAP;
 			page->swap_num = write_data_to_swap(frame->frame_addr);
+		}
+		if (page->src == MAP && pagedir_is_dirty(frame->thread->pagedir, frame->page_addr)) {
+			struct frame* frame = get_frame_by_page(page->page_addr);
+			lock_acquire(&file_lock);
+			file_seek(page->executable, page->offset);
+			file_write(page->executable, frame->frame_addr, 4096);
+			lock_release(&file_lock);
 		}
 	}
 	frame->page_addr = page_addr;

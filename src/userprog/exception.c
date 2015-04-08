@@ -16,6 +16,7 @@ static long long page_fault_cnt;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 static bool load_data_from_file(struct page* page, void* frame_addr);
+static void load_data_from_map(int id);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -186,6 +187,9 @@ page_fault (struct intr_frame *f)
       case SWAP:
         load_data_from_swap(page->swap_num, frame_addr);
         break;
+      case MAP:
+        load_data_from_map(page->map_id);
+        break;
       case STACK:
         break;
       default:
@@ -213,4 +217,25 @@ static bool load_data_from_file(struct page* page, void* frame_addr) {
   lock_release(&file_lock);
   memset(frame_addr + page->read_bytes, 0, PGSIZE - page->read_bytes); 
   return true;
+}
+
+
+static void load_data_from_map(int id) {
+  struct map* map = NULL;
+  struct list_elem* elem;
+  for (elem = list_begin(&maps); elem != list_end(&maps); elem = list_next(elem)) {
+    struct map* m = list_entry(elem, struct map, elem);
+    if (m->id == id) {
+      map = m;
+      break;
+    }
+  }
+  for (elem = list_begin(&map->pages); elem != list_end(&map->pages); elem = list_next(elem)) {
+    struct page* page = list_entry(elem, struct page, map_elem);
+    struct frame* frame = get_frame_by_page(page->page_addr);
+    lock_acquire(&file_lock);
+    file_seek(page->executable, page->offset);
+    file_read(page->executable, frame->frame_addr, PGSIZE);
+    lock_release(&file_lock);
+  }
 }

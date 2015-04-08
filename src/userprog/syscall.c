@@ -563,12 +563,60 @@ close_syscall (struct syscall_signature *sig, struct thread *cur)
 /* Mmap */
 static int
 mmap_syscall (struct syscall_signature *sig, struct thread *cur) {
-  return 0;
+  int fd = sig->param[0].value.ival;
+  char* addr = (char*)sig->param[1].value.pval;
+  int rv = 0;
+  static int count = 0;
+  if (addr == 0) return -1;
+  if (fd == 0 || fd == 1) return -1;
+  struct file *f = get_file (cur, fd);
+  if (!f) return -1;
+  lock_acquire(&fs_lock);
+  unsigned int size = file_length(f);
+  lock_release(&fs_lock);
+  if (size == 0) return -1;
+  /*if ( !valid_buffer (cur, addr, size, false, true) ) 
+    return -1;*/
+  if (((int)addr & PGMASK) != 0) return -1;
+  int first_page = addr;
+  int last_page = (int)(addr + size) & ~PGMASK;
+  int zero_size = 0;
+  if (size % PGSIZE != 0) {
+    zero_size = (size / PGSIZE + 1) * PGSIZE - size;
+  }
+  struct map* map = malloc(sizeof(struct map));
+  map->id = count;
+  list_init(&map->pages);
+  int i;
+  int ofs = 0;
+  for (i = first_page; i <= last_page; i += PGSIZE) {
+
+    vm_map_page(i, f, count, ofs, map);
+    ofs += PGSIZE;
+  }
+  list_push_back(&maps, &map->elem);
+
+  rv = count;
+  count++;
+  return rv;
 }
 
 /* Munmap */
 static int
 munmap_syscall (struct syscall_signature *sig, struct thread *cur) {
+  int id = sig->param[0].value.ival;
+
+  struct map* map = NULL;
+  struct list_elem* elem;
+  for (elem = list_begin(&maps); elem != list_end(&maps); elem = list_next(elem)) {
+    struct map* m = list_entry(elem, struct map, elem);
+    if (m->id == id) {
+      map = m;
+      break;
+    }
+  }
+  list_remove(&map->elem);
+  free(map);
   return 0;
 }
 

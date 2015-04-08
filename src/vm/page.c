@@ -18,6 +18,7 @@ bool vm_create_page(struct file* executable, off_t offset, void* page_addr, uint
 	}
 	page->page_addr = page_addr;
 	page->src = FILE;
+	page->map_id = -1;
 	page->executable = executable;
 	page->offset = offset;
 	page->read_bytes = read_bytes;
@@ -34,6 +35,7 @@ bool vm_set_stack(void* page_addr) {
 	}
 	page->page_addr = page_addr;
 	page->src = STACK;
+	page->map_id = -1;
 	page->writable = true;
 	page->locked = false;
 	list_push_back(&thread_current()->page_list, &page->elem);
@@ -47,4 +49,22 @@ void vm_release_page(struct list* page_list) {
 		elem = list_next(elem);
 		free(page);
 	}
+}
+
+
+void vm_map_page(void* page_addr, struct file* file, int map_id, int ofs, struct map* map) {
+	struct page* page = malloc(sizeof(struct page));
+	if (page == NULL) {
+		return false;
+	}
+	page->page_addr = page_addr;
+	page->src = MAP;
+	page->map_id = map->id;
+	page->executable = file;
+	page->offset = ofs;
+	page->writable = true;
+	page->locked = false;
+	list_push_back(&thread_current()->page_list, &page->elem);
+	list_push_back(&map->pages, &page->map_elem);
+	return true;
 }
